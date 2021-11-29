@@ -41,6 +41,11 @@ cudaH :: T.Text
 cudaH = $(embedStringFile "rts/c/cuda.h")
 {-# NOINLINE cudaH #-}
 
+-- | @rts/c/cuda.h@
+metalH :: T.Text
+metalH = $(embedStringFile "rts/c/Metal.h")
+{-# NOINLINE cudaH #-}
+
 -- | @rts/c/free_list.h@
 freeListH :: T.Text
 freeListH = $(embedStringFile "rts/c/free_list.h")

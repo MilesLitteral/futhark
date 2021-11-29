@@ -15,6 +15,7 @@ module Futhark.Actions
     compileCtoWASMAction,
     compileOpenCLAction,
     compileCUDAAction,
+    compileMetalAction,
     compileMulticoreAction,
     compileMulticoreToWASMAction,
     compilePythonAction,
@@ -260,6 +261,37 @@ compileCUDAAction fcfg mode outpath =
         ToServer -> do
           liftIO $ T.writeFile cpath $ cPrependHeader $ CCUDA.asServer cprog
           runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
+
+-- | The @futhark metal@ action .
+compileMetalAction :: FutharkConfig -> CompilerMode => FilePath -> Action GPUMem
+compileMetalAction fcfg mode outpath =
+  Action
+  { actionName = "Compile to Metal",
+    actionDescription = "Compile to Metal/MSH",
+    actionProcedure = helper 
+  }
+  where   
+    helper prog = do 
+      cprog <- handleWarnings fcfg $ Metal.compileProg prog 
+      let cpath = outpath `addExtension` "c"
+          hpath = outpath `addExtension` "h"
+          jsonpath = outpath `addExtension` "json"
+          extra_options = [
+            ""
+            --look up M1 Flags for Metal
+          ]
+      case mode of
+        ToLibrary -> do 
+          let (header, impl, manifest) = Metal.asLibrary cprog
+          liftIO $ T.writeFile hpath $ cPrependHeader header
+          liftIO $ T.writeFile cpath $ cPrependHeader impl
+          liftIO $ T.writeFile jsonpath manifest 
+        ToExecutable -> do
+          liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asExecutable cprog
+          runCC cpath outpath ["-O", "-std=gnu99"] ("-lm" : extra_options)
+        ToServer -> do
+          liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asServer cprog
+          runCC cpath outpath ["-O", "-std=gnu99"] ("-lm" : extra_options)
 
 -- | The @futhark multicore@ action.
 compileMulticoreAction :: FutharkConfig -> CompilerMode -> FilePath -> Action MCMem

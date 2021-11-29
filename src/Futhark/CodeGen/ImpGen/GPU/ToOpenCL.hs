@@ -7,6 +7,7 @@
 module Futhark.CodeGen.ImpGen.GPU.ToOpenCL
   ( kernelsToOpenCL,
     kernelsToCUDA,
+    kernelsToMetal,
   )
 where
 
@@ -33,9 +34,10 @@ import qualified Language.C.Quote.OpenCL as C
 import qualified Language.C.Syntax as C
 import NeatInterpolation (untrimming)
 
-kernelsToCUDA, kernelsToOpenCL :: ImpGPU.Program -> ImpOpenCL.Program
+kernelsToCUDA, kernelsToOpenCL, kernelsToMetal :: ImpGPU.Program -> ImpOpenCL.Program
 kernelsToCUDA = translateGPU TargetCUDA
 kernelsToOpenCL = translateGPU TargetOpenCL
+kernelsToMetal = translateGPU TargetMetal
 
 -- | Translate a kernels-program to an OpenCL-program.
 translateGPU ::
@@ -368,6 +370,13 @@ onKernel target kernel = do
           Just [C.cparam|uint $id:param|],
           [C.citem|volatile $ty:defaultMemBlockType $id:mem = &shared_mem[$id:param];|]
         )
+    prepareLocalMemory TargetMetal (mem, size) = do
+      param <- newVName $ baseString mem ++ "_offset"
+      return
+        ( Just $ SharedMemoryKArg size,
+          Just [C.cparam|uint $id:param|],
+          [C.citem|volatile $ty:defaultMemBlockType $id:mem = &shared_mem[$id:param];|]
+        )
 
 useAsParam :: KernelUse -> Maybe (C.Param, [C.BlockItem])
 useAsParam (ScalarUse name pt) = do
@@ -573,6 +582,110 @@ extern volatile __shared__ unsigned char shared_mem[];
     <> halfH
     <> cScalarDefs
     <> atomicsH
+
+genMetalAPrelude :: T.Text
+genMetalPrelude =
+  [untrimming|
+#define FUTHARK_METAL
+#define FUTHARK_F64_ENABLED
+
+typedef char int8_t;
+typedef short int16_t;
+typedef int int32_t;
+typedef long long int64_t;
+typedef unsigned char uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int uint32_t;
+typedef unsigned long long uint64_t;
+typedef uint8_t uchar;
+typedef uint16_t ushort;
+typedef uint32_t uint;
+typedef uint64_t ulong;
+#define __kernel extern "C" __global__ __launch_bounds__(MAX_THREADS_PER_BLOCK)
+#define __global
+#define __local
+#define __private
+#define __constant
+#define __write_only
+#define __read_only
+
+static inline int get_group_id_fn(int block_dim0, int block_dim1, int block_dim2, int d) {
+  switch (d) {
+    case 0: d = block_dim0; break;
+    case 1: d = block_dim1; break;
+    case 2: d = block_dim2; break;
+  }
+  switch (d) {
+    case 0: return blockIdx.x;
+    case 1: return blockIdx.y;
+    case 2: return blockIdx.z;
+    default: return 0;
+  }
+}
+#define get_group_id(d) get_group_id_fn(block_dim0, block_dim1, block_dim2, d)
+
+static inline int get_num_groups_fn(int block_dim0, int block_dim1, int block_dim2, int d) {
+  switch (d) {
+    case 0: d = block_dim0; break;
+    case 1: d = block_dim1; break;
+    case 2: d = block_dim2; break;
+  }
+  switch(d) {
+    case 0: return gridDim.x;
+    case 1: return gridDim.y;
+    case 2: return gridDim.z;
+    default: return 0;
+  }
+}
+#define get_num_groups(d) get_num_groups_fn(block_dim0, block_dim1, block_dim2, d)
+
+static inline int get_local_id(int d) {
+  switch (d) {
+    case 0: return threadIdx.x;
+    case 1: return threadIdx.y;
+    case 2: return threadIdx.z;
+    default: return 0;
+  }
+}
+
+static inline int get_local_size(int d) {
+  switch (d) {
+    case 0: return blockDim.x;
+    case 1: return blockDim.y;
+    case 2: return blockDim.z;
+    default: return 0;
+  }
+}
+
+static inline int get_global_id_fn(int block_dim0, int block_dim1, int block_dim2, int d) {
+  return get_group_id(d) * get_local_size(d) + get_local_id(d);
+}
+#define get_global_id(d) get_global_id_fn(block_dim0, block_dim1, block_dim2, d)
+
+static inline int get_global_size(int block_dim0, int block_dim1, int block_dim2, int d) {
+  return get_num_groups(d) * get_local_size(d);
+}
+
+#define CLK_LOCAL_MEM_FENCE 1
+#define CLK_GLOBAL_MEM_FENCE 2
+static inline void barrier(int x) {
+  __syncthreads();
+}
+static inline void mem_fence_local() {
+  __threadfence_block();
+}
+static inline void mem_fence_global() {
+  __threadfence();
+}
+
+#define NAN (0.0/0.0)
+#define INFINITY (1.0/0.0)
+extern volatile __shared__ unsigned char shared_mem[];
+|]
+    <> halfH
+    <> cScalarDefs
+    <> atomicsH
+
 
 compilePrimExp :: PrimExp KernelConst -> C.Exp
 compilePrimExp e = runIdentity $ GC.compilePrimExp compileKernelConst e

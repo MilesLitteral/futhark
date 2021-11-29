@@ -49,6 +49,7 @@ sizeHeuristicsTable :: [SizeHeuristic]
 sizeHeuristicsTable =
   [ SizeHeuristic "NVIDIA CUDA" DeviceGPU LockstepWidth 32,
     SizeHeuristic "AMD Accelerated Parallel Processing" DeviceGPU LockstepWidth 32,
+    SizeHeuristic "Apple Metal Shader Language" DeviceGPU LockstepWidth 32,
     SizeHeuristic "" DeviceGPU LockstepWidth 1,
     -- We calculate the number of groups to aim for 1024 threads per
     -- compute unit if we also use the default group size.  This seems
