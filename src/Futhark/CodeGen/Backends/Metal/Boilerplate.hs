@@ -37,17 +37,14 @@ errorMsgNumArgs = length . errorMsgArgTypes
 profilingEnclosure :: Name -> ([C.BlockItem], [C.BlockItem])
 profilingEnclosure name =
   ( [C.citems|
-      typename metalEvent_t *pevents = NULL;
-      if (ctx->profiling && !ctx->profiling_paused) {
-        pevents = metal_get_events(&ctx->metal,
-                                  &ctx->$id:(kernelRuns name),
-                                  &ctx->$id:(kernelRuntime name));
-        METAL_SUCCEED_FATAL(metalEventRecord(pevents[0], 0));
-      }
-      |],
-    [C.citems|
-      if (pevents != NULL) {
-        METAL_SUCCEED_FATAL(metalEventRecord(pevents[1], 0));
+      kernel void add_arrays(device const float* inA,
+                       device const float* inB,
+                       device float* result,
+                       uint index [[thread_position_in_grid]])
+      {
+          // the for-loop is replaced with a collection of threads, each of which
+          // calls this function.
+          result[index] = inA[index] + inB[index];
       }
       |]
   )
@@ -61,17 +58,50 @@ generateBoilerplate ::
   M.Map KernelName KernelSafety ->
   M.Map Name SizeClass ->
   [FailureMsg] ->
-  GC.CompilerM OpenCL () ()
+  GC.CompilerM Metal () ()
 generateBoilerplate metal_program metal_prelude cost_centres kernels sizes failures = do
   mapM_
     GC.earlyDecl
     [C.cunit|
       $esc:("#include <Foundation/Foundation.h>")
       $esc:("#include <Metal/Metal.h>")
-      $esc:("typedef CUdeviceptr fl_mem_t;") --change to metalDevicePtr
+      $esc:("#include "MetalProgram.h" ") //Futhark Generated Code of Code to Execute on GPU
       $esc:(T.unpack freeListH)
       $esc:(T.unpack metalH)
-      const char *metal_program[] = {$inits:fragments, NULL};
+
+
+// This is the C version of the function that the sample
+// implements in Metal Shading Language.
+void add_arrays(const float* inA,
+                const float* inB,
+                float* result,
+                int length)
+{
+    for (int index = 0; index < length ; index++)
+    {
+        result[index] = inA[index] + inB[index];
+    }
+}
+
+int main(int argc, const char * argv[]) {
+    @autoreleasepool {
+        
+        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+
+        // Create the custom object used to encapsulate the Metal code.
+        // Initializes objects to communicate with the GPU.
+        MetalAdder* adder = [[MetalAdder alloc] initWithDevice:device];
+        
+        // Create buffers to hold data
+        [adder prepareData];
+        
+        // Send a command to the GPU to perform the calculation.
+        [adder sendComputeCommand];
+
+        NSLog(@"Execution finished");
+    }
+    return 0;
+}
       |]
 
   generateSizeFuns sizes
@@ -111,30 +141,6 @@ generateConfigFuns sizes = do
                             };|]
     )
 
-  let size_value_inits = zipWith sizeInit [0 .. M.size sizes -1] (M.elems sizes)
-      sizeInit i size = [C.cstm|cfg->tuning_params[$int:i] = $int:val;|]
-        where
-          val = fromMaybe 0 $ sizeDefault size
-  GC.publicDef_ "context_config_new" GC.InitDecl $ \s ->
-    ( [C.cedecl|struct $id:cfg* $id:s(void);|],
-      [C.cedecl|struct $id:cfg* $id:s(void) {
-                         struct $id:cfg *cfg = (struct $id:cfg*) malloc(sizeof(struct $id:cfg));
-                         if (cfg == NULL) {
-                           return NULL;
-                         }
-
-                         cfg->profiling = 0;
-                         cfg->num_nvrtc_opts = 0;
-                         cfg->nvrtc_opts = (const char**) malloc(sizeof(const char*));
-                         cfg->nvrtc_opts[0] = NULL;
-                         $stms:size_value_inits
-                         metal_config_init(&cfg->cu_cfg, $int:num_sizes,
-                                          tuning_param_names, tuning_param_vars,
-                                          cfg->tuning_params, tuning_param_classes);
-                         return cfg;
-                       }|]
-    )
-
   GC.publicDef_ "context_config_free" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg) {
@@ -152,141 +158,6 @@ generateConfigFuns sizes = do
                          cfg->nvrtc_opts[cfg->num_nvrtc_opts] = NULL;
                        }|]
     )
-
-  GC.publicDef_ "context_config_set_debugging" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag) {
-                         cfg->cu_cfg.logging = cfg->cu_cfg.debugging = flag;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_set_profiling" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag) {
-                         cfg->profiling = flag;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_set_logging" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag) {
-                         cfg->cu_cfg.logging = flag;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_set_device" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *s);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *s) {
-                         set_preferred_device(&cfg->cu_cfg, s);
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_dump_program_to" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path) {
-                         cfg->cu_cfg.dump_program_to = path;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_load_program_from" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path) {
-                         cfg->cu_cfg.load_program_from = path;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_dump_ptx_to" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path) {
-                          cfg->cu_cfg.dump_ptx_to = path;
-                      }|]
-    )
-
-  GC.publicDef_ "context_config_load_ptx_from" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path) {
-                          cfg->cu_cfg.load_ptx_from = path;
-                      }|]
-    )
-
-  GC.publicDef_ "context_config_set_default_group_size" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int size);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, int size) {
-                         cfg->cu_cfg.default_block_size = size;
-                         cfg->cu_cfg.default_block_size_changed = 1;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_set_default_num_groups" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int num);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, int num) {
-                         cfg->cu_cfg.default_grid_size = num;
-                         cfg->cu_cfg.default_grid_size_changed = 1;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_set_default_tile_size" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int num);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, int size) {
-                         cfg->cu_cfg.default_tile_size = size;
-                         cfg->cu_cfg.default_tile_size_changed = 1;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_set_default_reg_tile_size" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int num);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, int size) {
-                         cfg->cu_cfg.default_reg_tile_size = size;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_set_default_threshold" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int num);|],
-      [C.cedecl|void $id:s(struct $id:cfg* cfg, int size) {
-                         cfg->cu_cfg.default_threshold = size;
-                       }|]
-    )
-
-  GC.publicDef_ "context_config_set_tuning_param" GC.InitDecl $ \s ->
-    ( [C.cedecl|int $id:s(struct $id:cfg* cfg, const char *param_name, size_t new_value);|],
-      [C.cedecl|int $id:s(struct $id:cfg* cfg, const char *param_name, size_t new_value) {
-
-                         for (int i = 0; i < $int:num_sizes; i++) {
-                           if (strcmp(param_name, tuning_param_names[i]) == 0) {
-                             cfg->tuning_params[i] = new_value;
-                             return 0;
-                           }
-                         }
-
-                         if (strcmp(param_name, "default_group_size") == 0) {
-                           cfg->cu_cfg.default_block_size = new_value;
-                           return 0;
-                         }
-
-                         if (strcmp(param_name, "default_num_groups") == 0) {
-                           cfg->cu_cfg.default_grid_size = new_value;
-                           return 0;
-                         }
-
-                         if (strcmp(param_name, "default_threshold") == 0) {
-                           cfg->cu_cfg.default_threshold = new_value;
-                           return 0;
-                         }
-
-                         if (strcmp(param_name, "default_tile_size") == 0) {
-                           cfg->cu_cfg.default_tile_size = new_value;
-                           return 0;
-                         }
-
-                         if (strcmp(param_name, "default_reg_tile_size") == 0) {
-                           cfg->cu_cfg.default_reg_tile_size = new_value;
-                           return 0;
-                         }
-
-                         return 1;
-                       }|]
-    )
-  return cfg
 
 generateContextFuns ::
   String ->
@@ -419,46 +290,9 @@ generateContextFuns cfg cost_centres kernels sizes failures = do
                                }|]
     )
 
-  GC.publicDef_ "context_sync" GC.MiscDecl $ \s ->
-    ( [C.cedecl|int $id:s(struct $id:ctx* ctx);|],
-      [C.cedecl|int $id:s(struct $id:ctx* ctx) {
-                 METAL_SUCCEED_OR_RETURN(cuCtxPushCurrent(ctx->metal.cu_ctx));
-                 METAL_SUCCEED_OR_RETURN(cuCtxSynchronize());
-                 if (ctx->failure_is_an_option) {
-                   // Check for any delayed error.
-                   typename int32_t failure_idx;
-                   METAL_SUCCEED_OR_RETURN(
-                     cuMemcpyDtoH(&failure_idx,
-                                  ctx->global_failure,
-                                  sizeof(int32_t)));
-                   ctx->failure_is_an_option = 0;
-
-                   if (failure_idx >= 0) {
-                     // We have to clear global_failure so that the next entry point
-                     // is not considered a failure from the start.
-                     typename int32_t no_failure = -1;
-                     METAL_SUCCEED_OR_RETURN(
-                       cuMemcpyHtoD(ctx->global_failure,
-                                    &no_failure,
-                                    sizeof(int32_t)));
-
-                     typename int64_t args[$int:max_failure_args+1];
-                     METAL_SUCCEED_OR_RETURN(
-                       cuMemcpyDtoH(&args,
-                                    ctx->global_failure_args,
-                                    sizeof(args)));
-
-                     $stm:(failureSwitch failures)
-
-                     return 1;
-                   }
-                 }
-                 METAL_SUCCEED_OR_RETURN(cuCtxPopCurrent(&ctx->metal.cu_ctx));
-                 return 0;
-               }|]
-    )
-
+  {- potentially not necessary or has to be rethought because of how
+  Objective-C handles memory
   GC.onClear
     [C.citem|if (ctx->error == NULL) {
                METAL_SUCCEED_NONFATAL(metal_free_all(&ctx->metal));
-             }|]
+             }|]-}
