@@ -53,7 +53,7 @@ commands =
       ("c", (C.main, "Compile to sequential C.")),
       ("opencl", (OpenCL.main, "Compile to C calling OpenCL.")),
       ("cuda", (CCUDA.main, "Compile to C calling CUDA.")),
-      ("metal", Metal.main, "Compile to C calling Metal"),
+      ("metal", Metal.main, "Compile to ObjC/C calling Metal"),
       ("multicore", (Multicore.main, "Compile to multicore C.")),
       ("python", (Python.main, "Compile to sequential Python.")),
       ("pyopencl", (PyOpenCL.main, "Compile to Python calling PyOpenCL.")),

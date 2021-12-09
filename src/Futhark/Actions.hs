@@ -280,23 +280,14 @@ compileMetalAction fcfg mode outpath =
       cprog <- handleWarnings fcfg $ Metal.compileProg prog 
       let cpath = outpath `addExtension` "m"
           hpath = outpath `addExtension` "h"
-          mpath = outpath `addExtension` "metal" --Perhaps this should just be a dup of passed C/ObjC code
+          mpath = outpath `addExtension` "metal" --Perhaps this should just be a dup of passed C code Modified with a Kernel Keyword
           jsonpath = outpath `addExtension` "json"
-          {- Not Necessary for Metal? 
-          extra_options = [
-            "-g", 
-            "-fgnu-runtime", 
-            "-c",
-            "-sdk"
-            --The Following commands build a Metal Library, Should Futhark Support this?
-            --xcrun -sdk macosx metal -c MyLibrary.metal -o MyLibrary.air
-            --xcrun -sdk macosx metallib MyLibrary.air -o MyLibrary.metallib
-          ] -}
       case mode of
         ToLibrary -> do 
-          let (header, impl, manifest) = Metal.asLibrary cprog
-          liftIO $ T.writeFile hpath $ cPrependHeader header
-          liftIO $ T.writeFile cpath $ cPrependHeader impl
+          let (header, impl, manifest) = Metal.asLibrary cprog -- create Metal Lib
+          liftIO $ T.writeFile hpath $ cPrependHeader header --h Files
+          liftIO $ T.writeFile cpath $ cPrependHeader impl -- m Files
+          liftIO $ T.WriteFile mpath $ cPrependHeader impl -- Metal Files
           liftIO $ T.writeFile jsonpath manifest 
         ToExecutable -> do
           liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asExecutable cprog
