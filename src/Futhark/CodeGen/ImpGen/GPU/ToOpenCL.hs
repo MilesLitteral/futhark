@@ -82,6 +82,7 @@ translateGPU target prog =
   where
     genPrelude TargetOpenCL = genOpenClPrelude
     genPrelude TargetCUDA = const genCUDAPrelude
+    genPrelude TargetMetal = genMetalPrelude
 
 -- | Due to simplifications after kernel extraction, some threshold
 -- parameters may contain KernelPaths that reference threshold
