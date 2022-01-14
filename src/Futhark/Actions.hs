@@ -263,35 +263,39 @@ compileCUDAAction fcfg mode outpath =
           runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
 
 -- | The @futhark metal@ action .
+{- The Following is needed:
+   .m File Creation (For Command Buffer, and Obj-C Reflection of C code) 
+   .h (ObjC) Header Creation (For .m Files) 
+   Metal Kernal generation (Generate .metal files from C)
+-}
 compileMetalAction :: FutharkConfig -> CompilerMode => FilePath -> Action GPUMem
 compileMetalAction fcfg mode outpath =
   Action
   { actionName = "Compile to Metal",
-    actionDescription = "Compile to Metal/MSH",
+    actionDescription = "Compile to Metal/MSL",
     actionProcedure = helper 
   }
   where   
     helper prog = do 
       cprog <- handleWarnings fcfg $ Metal.compileProg prog 
-      let cpath = outpath `addExtension` "c"
+      let cpath = outpath `addExtension` "m"
           hpath = outpath `addExtension` "h"
+          mpath = outpath `addExtension` "metal" --Perhaps this should just be a dup of passed C code Modified with a Kernel Keyword
           jsonpath = outpath `addExtension` "json"
-          extra_options = [
-            ""
-            --look up M1 Flags for Metal
-          ]
       case mode of
         ToLibrary -> do 
-          let (header, impl, manifest) = Metal.asLibrary cprog
-          liftIO $ T.writeFile hpath $ cPrependHeader header
-          liftIO $ T.writeFile cpath $ cPrependHeader impl
+          let (header, impl, manifest) = Metal.asLibrary cprog -- create Metal Lib
+          liftIO $ T.writeFile hpath $ cPrependHeader header --h Files
+          liftIO $ T.writeFile cpath $ cPrependHeader impl -- m Files
+          liftIO $ T.WriteFile mpath $ cPrependHeader impl -- Metal Files
           liftIO $ T.writeFile jsonpath manifest 
         ToExecutable -> do
           liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asExecutable cprog
-          runCC cpath outpath ["-O", "-std=gnu99"] ("-lm" : extra_options)
+          --Build ObjC with Clang!
+          runCC cpath outpath ["-g -fgnu-runtime -O", "-std=gnu99"] --("-lm" : extra_options)
         ToServer -> do
           liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asServer cprog
-          runCC cpath outpath ["-O", "-std=gnu99"] ("-lm" : extra_options)
+          runCC cpath outpath ["-g -fgnu-runtime -O", "-std=gnu99"] --("-lm" : extra_options)
 
 -- | The @futhark multicore@ action.
 compileMulticoreAction :: FutharkConfig -> CompilerMode -> FilePath -> Action MCMem
