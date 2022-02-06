@@ -33,13 +33,12 @@ import qualified Language.C.Syntax as C
 
 -- | Compile the program to ImpCode with multicore operations.
 compileProg ::
-  MonadFreshNames m =>
-  Prog MCMem ->
-  m (ImpGen.Warnings, GC.CParts)
-compileProg =
+  MonadFreshNames m => T.Text -> Prog MCMem -> m (ImpGen.Warnings, GC.CParts)
+compileProg version =
   traverse
     ( GC.compileProg
         "multicore"
+        version
         operations
         generateContext
         ""
@@ -54,7 +53,8 @@ generateContext = do
 
   cfg <- GC.publicDef "context_config" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:s;|],
-      [C.cedecl|struct $id:s { int debugging;
+      [C.cedecl|struct $id:s { int in_use;
+                               int debugging;
                                int profiling;
                                int num_threads;
                              };|]
@@ -67,6 +67,7 @@ generateContext = do
                              if (cfg == NULL) {
                                return NULL;
                              }
+                             cfg->in_use = 0;
                              cfg->debugging = 0;
                              cfg->profiling = 0;
                              cfg->num_threads = 0;
@@ -77,6 +78,7 @@ generateContext = do
   GC.publicDef_ "context_config_free" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg) {
+                             assert(!cfg->in_use);
                              free(cfg);
                            }|]
     )
@@ -115,6 +117,7 @@ generateContext = do
   ctx <- GC.publicDef "context" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:s;|],
       [C.cedecl|struct $id:s {
+                      struct $id:cfg* cfg;
                       struct scheduler scheduler;
                       int detail_memory;
                       int debugging;
@@ -137,10 +140,13 @@ generateContext = do
   GC.publicDef_ "context_new" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg);|],
       [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg) {
+             assert(!cfg->in_use);
              struct $id:ctx* ctx = (struct $id:ctx*) malloc(sizeof(struct $id:ctx));
              if (ctx == NULL) {
                return NULL;
              }
+             ctx->cfg = cfg;
+             ctx->cfg->in_use = 1;
 
              // Initialize rand()
              fast_srand(time(0));
@@ -184,6 +190,7 @@ generateContext = do
              free_constants(ctx);
              (void)scheduler_destroy(&ctx->scheduler);
              free_lock(&ctx->lock);
+             ctx->cfg->in_use = 0;
              free(ctx);
            }|]
     )
@@ -494,7 +501,7 @@ generateParLoopFn lexical basename code fstruct free retval tid ntasks = do
   let (fargs, fctypes) = unzip free
   let (retval_args, retval_ctypes) = unzip retval
   multicoreDef basename $ \s -> do
-    fbody <- benchmarkCode s (Just tid) <=< GC.inNewFunction False $
+    fbody <- benchmarkCode s (Just tid) <=< GC.inNewFunction $
       GC.cachingMemory lexical $
         \decl_cached free_cached -> GC.blockScope $ do
           mapM_ GC.item [C.citems|$decls:(compileGetStructVals fstruct fargs fctypes)|]
@@ -540,7 +547,7 @@ prepareTaskStruct name free_args free_ctypes retval_args retval_ctypes = do
 
 -- Generate a segop function for top_level and potentially nested SegOp code
 compileOp :: GC.OpCompiler Multicore ()
-compileOp (Segop name params seq_task par_task retvals (SchedulerInfo nsubtask e sched)) = do
+compileOp (SegOp name params seq_task par_task retvals (SchedulerInfo nsubtask e sched)) = do
   let (ParallelTask seq_code tid) = seq_task
   free_ctypes <- mapM paramToCType params
   retval_ctypes <- mapM paramToCType retvals
@@ -590,7 +597,7 @@ compileOp (Segop name params seq_task par_task retvals (SchedulerInfo nsubtask e
         [C.citems|int $id:ftask_err = scheduler_prepare_task(&ctx->scheduler, &$id:ftask_name);
                   if ($id:ftask_err != 0) {
                     $items:free_all_mem;
-                    err = 1;
+                    err = $id:ftask_err;
                     goto cleanup;
                   }|]
 
@@ -604,15 +611,14 @@ compileOp (ParLoop s' i prebody body postbody free tid) = do
 
   let lexical =
         lexicalMemoryUsage $
-          Function Nothing [] free (prebody <> body) [] []
+          Function Nothing [] free (prebody <> body <> postbody) [] []
 
   fstruct <-
     prepareTaskStruct (s' ++ "_parloop_struct") free_args free_ctypes mempty mempty
 
   ftask <- multicoreDef (s' ++ "_parloop") $ \s -> do
-    fbody <- benchmarkCode s (Just tid)
-      <=< GC.inNewFunction False
-      $ GC.cachingMemory lexical $
+    fbody <- benchmarkCode s (Just tid) <=< GC.inNewFunction $
+      GC.cachingMemory lexical $
         \decl_cached free_cached -> GC.blockScope $ do
           mapM_
             GC.item
@@ -658,7 +664,7 @@ compileOp (ParLoop s' i prebody body postbody free tid) = do
       [C.citems|int $id:ftask_err = scheduler_execute_task(&ctx->scheduler,
                                                            &$id:ftask_name);
                if ($id:ftask_err != 0) {
-                 err = 1;
+                 err = $id:ftask_err;
                  goto cleanup;
                }|]
 

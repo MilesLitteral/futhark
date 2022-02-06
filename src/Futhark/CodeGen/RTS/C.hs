@@ -17,6 +17,7 @@ module Futhark.CodeGen.RTS.C
     tuningH,
     utilH,
     valuesH,
+    errorsH,
   )
 where
 
@@ -41,11 +42,6 @@ cudaH :: T.Text
 cudaH = $(embedStringFile "rts/c/cuda.h")
 {-# NOINLINE cudaH #-}
 
--- | @rts/c/metal.h@
-metalH :: T.Text
-metalH = $(embedStringFile "rts/c/Metal.h")
-{-# NOINLINE metalH #-}
-
 -- | @rts/c/free_list.h@
 freeListH :: T.Text
 freeListH = $(embedStringFile "rts/c/free_list.h")
@@ -65,6 +61,11 @@ lockH = $(embedStringFile "rts/c/lock.h")
 openclH :: T.Text
 openclH = $(embedStringFile "rts/c/opencl.h")
 {-# NOINLINE openclH #-}
+
+-- | @rts/c/mtlpp.hpp@
+metalH :: T.Text
+metalH = $(embedStringFile "rts/c/mtlpp.hpp")
+{-# NOINLINE metalH #-}
 
 -- | @rts/c/scalar_f16.h@
 scalarF16H :: T.Text
@@ -105,3 +106,8 @@ utilH = $(embedStringFile "rts/c/util.h")
 valuesH :: T.Text
 valuesH = $(embedStringFile "rts/c/values.h")
 {-# NOINLINE valuesH #-}
+
+-- | @rts/c/errors.h@
+errorsH :: T.Text
+errorsH = $(embedStringFile "rts/c/errors.h")
+{-# NOINLINE errorsH #-}

@@ -92,13 +92,13 @@ import qualified Data.Map.Strict as M
 import Data.Maybe
 import qualified Data.Text as T
 import Futhark.CodeGen.Backends.GenericC.CLI (cliDefs)
-import qualified Futhark.CodeGen.Backends.GenericC.Manifest as Manifest
 import Futhark.CodeGen.Backends.GenericC.Options
 import Futhark.CodeGen.Backends.GenericC.Server (serverDefs)
 import Futhark.CodeGen.Backends.SimpleRep
 import Futhark.CodeGen.ImpCode
-import Futhark.CodeGen.RTS.C (halfH, lockH, timingH, utilH)
+import Futhark.CodeGen.RTS.C (errorsH, halfH, lockH, timingH, utilH)
 import Futhark.IR.Prop (isBuiltInFunction)
+import qualified Futhark.Manifest as Manifest
 import Futhark.MonadFreshNames
 import Futhark.Util.Pretty (prettyText)
 import qualified Language.C.Quote.OpenCL as C
@@ -258,7 +258,7 @@ defError msg stacktrace = do
   items
     [C.citems|ctx->error = msgprintf($string:formatstr', $args:formatargs, $string:stacktrace);
               $items:free_all_mem
-              err = 1;
+              err = FUTHARK_PROGRAM_ERROR;
               goto cleanup;|]
 
 defCall :: CallCompiler op s
@@ -443,17 +443,15 @@ collect' m = do
 -- generate code for a new function.  Use this so that the compiler
 -- understands that previously declared memory doesn't need to be
 -- freed inside this action.
-inNewFunction :: Bool -> CompilerM op s a -> CompilerM op s a
-inNewFunction keep_cached m = do
+inNewFunction :: CompilerM op s a -> CompilerM op s a
+inNewFunction m = do
   old_mem <- gets compDeclaredMem
   modify $ \s -> s {compDeclaredMem = mempty}
   x <- local noCached m
   modify $ \s -> s {compDeclaredMem = old_mem}
   return x
   where
-    noCached env
-      | keep_cached = env
-      | otherwise = env {envCachedMem = mempty}
+    noCached env = env {envCachedMem = mempty}
 
 item :: C.BlockItem -> CompilerM op s ()
 item x = modify $ \s -> s {compItems = DL.snoc (compItems s) x}
@@ -673,12 +671,15 @@ defineMemorySpace space = do
   }
   int ret = $id:(fatMemUnRef space)(ctx, block, desc);
 
-  ctx->$id:usagename += size;
+  if (ret != FUTHARK_SUCCESS) {
+    return ret;
+  }
+
   if (ctx->detail_memory) {
     fprintf(ctx->log, "Allocating %lld bytes for %s in %s (then allocated: %lld bytes)",
             (long long) size,
             desc, $string:spacedesc,
-            (long long) ctx->$id:usagename);
+            (long long) ctx->$id:usagename + size);
   }
   if (ctx->$id:usagename > ctx->$id:peakname) {
     ctx->$id:peakname = ctx->$id:usagename;
@@ -690,11 +691,28 @@ defineMemorySpace space = do
   }
 
   $items:alloc
-  block->references = (int*) malloc(sizeof(int));
-  *(block->references) = 1;
-  block->size = size;
-  block->desc = desc;
-  return ret;
+
+  if (ctx->error == NULL) {
+    block->references = (int*) malloc(sizeof(int));
+    *(block->references) = 1;
+    block->size = size;
+    block->desc = desc;
+    ctx->$id:usagename += size;
+    return FUTHARK_SUCCESS;
+  } else {
+    // We are naively assuming that any memory allocation error is due to OOM.
+    // We preserve the original error so that a savvy user can perhaps find
+    // glory despite our naiveté.
+
+    char *old_error = ctx->error;
+    ctx->error = msgprintf("Failed to allocate memory in %s.\nAttempted allocation: %12lld bytes\nCurrently allocated:  %12lld bytes\n%s",
+                           $string:spacedesc,
+                           (long long) size,
+                           (long long) ctx->$id:usagename,
+                           old_error);
+    free(old_error);
+    return FUTHARK_OUT_OF_MEMORY;
+  }
   }|]
 
   -- Memory setting - unreference the destination and increase the
@@ -1066,7 +1084,7 @@ opaqueLibraryFunctions desc vds = do
             shapearr = "shape_" ++ show i
             dims = [[C.cexp|$id:shapearr[$int:j]|] | j <- [0 .. rank - 1]]
             num_elems = cproduct dims
-        item [C.citem|typename int64_t $id:shapearr[$int:rank];|]
+        item [C.citem|typename int64_t $id:shapearr[$int:rank] = {0};|]
         stms $ loadValueHeader sign pt rank [C.cexp|$id:shapearr|] [C.cexp|src|]
         item [C.citem|const void* $id:dataptr = src;|]
         stm [C.cstm|obj->$id:field = NULL;|]
@@ -1497,6 +1515,7 @@ asServer parts =
 compileProg ::
   MonadFreshNames m =>
   T.Text ->
+  T.Text ->
   Operations op () ->
   CompilerM op () () ->
   T.Text ->
@@ -1504,7 +1523,7 @@ compileProg ::
   [Option] ->
   Definitions op ->
   m CParts
-compileProg backend ops extra header_extra spaces options prog = do
+compileProg backend version ops extra header_extra spaces options prog = do
   src <- getNameSource
   let ((prototypes, definitions, entry_point_decls, manifest), endstate) =
         runCompilerM ops src () compileProg'
@@ -1542,6 +1561,7 @@ $entrydecls
 // Miscellaneous
 $miscdecls
 #define FUTHARK_BACKEND_$backend
+$errorsH
 
 #ifdef __cplusplus
 }
@@ -1636,7 +1656,7 @@ $entry_point_decls
         ( T.unlines $ map prettyText prototypes,
           T.unlines $ map (prettyText . funcToDef) functions,
           T.unlines $ map prettyText entry_points,
-          Manifest.Manifest (M.fromList entry_points_manifest) types backend
+          Manifest.Manifest (M.fromList entry_points_manifest) types backend version
         )
 
     funcToDef func = C.FuncDef func loc

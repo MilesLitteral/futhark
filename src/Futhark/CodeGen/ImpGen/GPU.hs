@@ -10,6 +10,7 @@
 module Futhark.CodeGen.ImpGen.GPU
   ( compileProgOpenCL,
     compileProgCUDA,
+    compileProgMetal
     Warnings,
   )
 where
@@ -47,8 +48,8 @@ callKernelOperations =
       opsAllocCompilers = mempty
     }
 
-openclAtomics, cudaAtomics :: AtomicBinOp
-(openclAtomics, cudaAtomics) = (flip lookup opencl, flip lookup cuda)
+openclAtomics, cudaAtomics, metalAtomics :: AtomicBinOp
+(openclAtomics, cudaAtomics, metalAtomics) = (flip lookup opencl, flip lookup cuda, flip lookup metal)
   where
     opencl64 =
       [ (Add Int64 OverflowUndef, Imp.AtomicAdd Int64),
@@ -76,6 +77,11 @@ openclAtomics, cudaAtomics :: AtomicBinOp
         ++ [ (FAdd Float32, Imp.AtomicFAdd Float32),
              (FAdd Float64, Imp.AtomicFAdd Float64)
            ]
+    metal =
+      opencl
+        ++ [ (FAdd Float32, Imp.AtomicFAdd Float32),
+             (FAdd Float64, Imp.AtomicFAdd Float64)
+           ]
 
 compileProg ::
   MonadFreshNames m =>
@@ -98,12 +104,14 @@ compileProg env prog =
     setOpSpace op = op
 
 -- | Compile a 'GPUMem' program to low-level parallel code, with
--- either CUDA or OpenCL characteristics.
+-- either CUDA, OpenCL, or Metal characteristics.
+compileProgMetal,
 compileProgOpenCL,
   compileProgCUDA ::
     MonadFreshNames m => Prog GPUMem -> m (Warnings, Imp.Program)
 compileProgOpenCL = compileProg $ HostEnv openclAtomics OpenCL mempty
 compileProgCUDA = compileProg $ HostEnv cudaAtomics CUDA mempty
+compileProgMetal = compileProg $ HostEnv metalAtomics Metal mempty
 
 opCompiler ::
   Pat GPUMem ->
@@ -198,7 +206,7 @@ checkLocalMemoryReqs code = do
       return $ Just $ foldl' (.&&.) true (map fits alloc_sizes)
   where
     getGPU = foldMap getKernel
-    getKernel (Imp.CallKernel k) = [k]
+    getKernel (Imp.CallKernel k) | Imp.kernelCheckLocalMemory k = [k]
     getKernel _ = []
 
     localAllocSizes = foldMap localAllocSize

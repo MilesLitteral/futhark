@@ -128,11 +128,11 @@ compileThreadResult _ _ TileReturns {} =
 compileThreadResult _ _ RegTileReturns {} =
   compilerBugS "compileThreadResult: RegTileReturns unhandled."
 
-freeVariables :: Imp.Code -> [VName] -> [VName]
+freeVariables :: FreeIn a => a -> [VName] -> [VName]
 freeVariables code names =
   namesToList $ freeIn code `namesSubtract` namesFromList names
 
-freeParams :: Imp.Code -> [VName] -> MulticoreGen [Imp.Param]
+freeParams :: FreeIn a => a -> [VName] -> MulticoreGen [Imp.Param]
 freeParams code names = do
   let freeVars = freeVariables code names
   ts <- mapM lookupType freeVars
@@ -312,29 +312,27 @@ atomicUpdateLocking _ op = AtomicLocking $ \locking arrs bucket -> do
   -- Critical section
   let try_acquire_lock = do
         old <-- (0 :: Imp.TExp Int32)
-        sOp $
-          Imp.Atomic $
-            Imp.AtomicCmpXchg
-              int32
-              (tvVar old)
-              locks'
-              (sExt32 <$> locks_offset)
-              (tvVar continue)
-              (untyped (lockingToLock locking))
+        sOp . Imp.Atomic $
+          Imp.AtomicCmpXchg
+            int32
+            (tvVar old)
+            locks'
+            (sExt32 <$> locks_offset)
+            (tvVar continue)
+            (untyped (lockingToLock locking))
       lock_acquired = tvExp continue
       -- Even the releasing is done with an atomic rather than a
       -- simple write, for memory coherency reasons.
       release_lock = do
         old <-- lockingToLock locking
-        sOp $
-          Imp.Atomic $
-            Imp.AtomicCmpXchg
-              int32
-              (tvVar old)
-              locks'
-              (sExt32 <$> locks_offset)
-              (tvVar continue)
-              (untyped (lockingToUnlock locking))
+        sOp . Imp.Atomic $
+          Imp.AtomicCmpXchg
+            int32
+            (tvVar old)
+            locks'
+            (sExt32 <$> locks_offset)
+            (tvVar continue)
+            (untyped (lockingToUnlock locking))
 
   -- Preparing parameters. It is assumed that the caller has already
   -- filled the arr_params. We copy the current value to the

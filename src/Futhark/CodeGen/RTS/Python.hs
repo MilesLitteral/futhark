@@ -23,6 +23,10 @@ memoryPy = $(embedStringFile "rts/python/memory.py")
 openclPy :: T.Text
 openclPy = $(embedStringFile "rts/python/opencl.py")
 
+-- | @rts/python/metal.py@
+metalPy :: T.Text
+metalPy = $(embedStringFile "rts/python/metal.py")
+
 -- | @rts/python/panic.py@
 panicPy :: T.Text
 panicPy = $(embedStringFile "rts/python/panic.py")

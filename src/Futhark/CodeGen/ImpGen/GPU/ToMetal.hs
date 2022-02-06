@@ -3,11 +3,8 @@
 {-# LANGUAGE TupleSections #-}
 
 -- | This module defines a translation from imperative code with
--- kernels to imperative code with OpenCL calls.
-module Futhark.CodeGen.ImpGen.GPU.ToOpenCL
-  ( kernelsToOpenCL,
-    kernelsToCUDA,
-  )
+-- kernels to imperative code with Metal calls.
+module Futhark.CodeGen.ImpGen.GPU.ToMetal (kernelsToMetal)
 where
 
 import Control.Monad.Identity
@@ -21,32 +18,134 @@ import qualified Futhark.CodeGen.Backends.GenericC as GC
 import Futhark.CodeGen.Backends.SimpleRep
 import Futhark.CodeGen.ImpCode.GPU hiding (Program)
 import qualified Futhark.CodeGen.ImpCode.GPU as ImpGPU
-import Futhark.CodeGen.ImpCode.OpenCL hiding (Program)
-import qualified Futhark.CodeGen.ImpCode.OpenCL as ImpOpenCL
+import Futhark.CodeGen.ImpCode.Metal hiding (Program)
+import qualified Futhark.CodeGen.ImpCode.Metal as ImpMetal
 import Futhark.CodeGen.RTS.C (atomicsH, halfH)
 import Futhark.Error (compilerLimitationS)
 import Futhark.IR.Prop (isBuiltInFunction)
 import Futhark.MonadFreshNames
 import Futhark.Util (zEncodeString)
 import Futhark.Util.Pretty (prettyOneLine, prettyText)
-import qualified Language.C.Quote.OpenCL as C
+import qualified Language.C.Quote.Metal as C
 import qualified Language.C.Syntax as C
 import NeatInterpolation (untrimming)
 
-kernelsToCUDA, kernelsToOpenCL :: ImpGPU.Program -> ImpOpenCL.Program
-kernelsToCUDA = translateGPU TargetCUDA
-kernelsToOpenCL = translateGPU TargetOpenCL
 
--- | Translate a kernels-program to an OpenCL-program.
+
+{-
+    void generateRandomFloatData(mtlpp::Buffer buffer)
+    {
+        float* dataPtr = (float*)buffer.GetContents();
+
+        for (unsigned long index = 0; index < arrayLength; index++)
+        {
+            dataPtr[index] = (float)rand()/(float)(RAND_MAX);
+        }
+    }
+
+    void prepareData(mtlpp::Device device)
+    {
+        // Allocate three buffers to hold our initial data and the result.
+        _mBufferA = device.NewBuffer(bufferSize, mtlpp::ResourceOptions::StorageModeShared);
+        _mBufferB = device.NewBuffer(bufferSize, mtlpp::ResourceOptions::StorageModeShared);
+        _mBufferResult = device.NewBuffer(bufferSize, mtlpp::ResourceOptions::StorageModeShared);
+
+        generateRandomFloatData(_mBufferA);
+        generateRandomFloatData(_mBufferB);
+    }
+
+
+    void sendComputeCommand(mtlpp::CommandQueue commandQueue)
+    {
+        // Create a command buffer to hold commands.
+        mtlpp::CommandBuffer commandBuffer = commandQueue.CommandBuffer();
+        // Start a compute pass.
+        mtlpp::ComputeCommandEncoder computeEncoder = commandBuffer.ComputeCommandEncoder();// computeCommandEncoder];
+
+        encodeAddCommand(computeEncoder);
+        // End the compute pass.
+        computeEncoder.EndEncoding();
+
+        // Execute the command.
+        commandBuffer.Commit();
+
+        // Normally, you want to do other work in your app while the GPU is running,
+        // but in this example, the code simply blocks until the calculation is complete.
+        commandBuffer.WaitUntilCompleted();
+
+        verifyResults();
+    }
+
+
+    void encodeAddCommand(mtlpp::ComputeCommandEncoder computeEncoder) {
+
+        // Encode the pipeline state object and its parameters.
+        computeEncoder.SetComputePipelineState(_mAddFunctionPSO);
+        computeEncoder.SetBuffer(_mBufferA, 0, 0);
+        computeEncoder.SetBuffer(_mBufferB, 0, 1);
+        computeEncoder.SetBuffer(_mBufferResult, 0, 2);
+        //_mBufferResult offset:x atIndex:y
+
+        mtlpp::Size gridSize = mtlpp::Size(arrayLength, 1, 1);
+
+        // Calculate a threadgroup size.
+        uint32_t threadGroupSize = _mAddFunctionPSO.GetMaxTotalThreadsPerThreadgroup();
+        if (threadGroupSize > arrayLength)
+        {
+            threadGroupSize = arrayLength;
+        }
+        mtlpp::Size threadgroupSize = mtlpp::Size(threadGroupSize, 1, 1);
+
+        // Encode the compute command.
+        computeEncoder.DispatchThreadgroups(gridSize, threadgroupSize);
+    }
+
+-}
+-- void generateMetalLib(const char *src, mtlpp::Device device){
+-- const char shadersSrc[] = 
+--         "#include <metal_stdlib>";
+--         "using namespace metal;";
+--         "kernel void sqr(";
+--             "const device float *vIn [[ buffer(0) ]],";
+--             "device float *vOut [[ buffer(1) ]],";
+--             "uint id[[ thread_position_in_grid ]])";
+--         "{";
+--             "vOut[id] = vIn[id] * vIn[id];";       
+--         "}";
+
+--     ns::Error* error = NULL; //nullptr
+      
+--     mtlpp::Library library  = device.NewLibrary(shadersSrc, mtlpp::CompileOptions(), error);
+--     assert(library);
+--     mtlpp::Function sqrFunc = library.NewFunction("sqr");
+--     assert(sqrFunc);
+
+--     mtlpp::ComputePipelineState computePipelineState = device.NewComputePipelineState(sqrFunc, error);
+--     assert(computePipelineState);
+
+--     mtlpp::CommandQueue commandQueue = device.NewCommandQueue();
+--     assert(commandQueue);
+    
+--     adder.prepareData(device);
+--     printf("prepare data\n");
+--     // Send a command to the GPU to perform the calculation.
+--     adder.sendComputeCommand(adder._mCommandQueue);
+-- }
+
+
+kernelsToMetal :: ImpGPU.Program -> ImpMetal.Program
+kernelsToMetal = translateGPU TargetMetal
+
+-- | Translate a kernels-program to a Metal-program.
 translateGPU ::
   KernelTarget ->
   ImpGPU.Program ->
-  ImpOpenCL.Program
+  ImpMetal.Program
 translateGPU target prog =
   let ( prog',
-        ToOpenCL kernels device_funs used_types sizes failures
+        ToMetal kernels device_funs used_types sizes failures
         ) =
-          (`runState` initialOpenCL) . (`runReaderT` defFuns prog) $ do
+          (`runState` initialMetal) . (`runReaderT` defFuns prog) $ do
             let ImpGPU.Definitions
                   (ImpGPU.Constants ps consts)
                   (ImpGPU.Functions funs) = prog
@@ -55,31 +154,30 @@ translateGPU target prog =
               (fname,) <$> traverse (onHostOp target) fun
 
             return $
-              ImpOpenCL.Definitions
-                (ImpOpenCL.Constants ps consts')
-                (ImpOpenCL.Functions funs')
+              ImpMetal.Definitions
+                (ImpMetal.Constants ps consts')
+                (ImpMetal.Functions funs')
 
       (device_prototypes, device_defs) = unzip $ M.elems device_funs
       kernels' = M.map fst kernels
-      opencl_code = openClCode $ map snd $ M.elems kernels
+      metal_code = metalCode $ map snd $ M.elems kernels
 
-      opencl_prelude =
+      metal_prelude =
         T.unlines
           [ genPrelude target used_types,
             T.unlines $ map prettyText device_prototypes,
             T.unlines $ map prettyText device_defs
           ]
-   in ImpOpenCL.Program
-        opencl_code
-        opencl_prelude
+   in ImpMetal.Program
+        metal_code
+        metal_prelude
         kernels'
         (S.toList used_types)
         (cleanSizes sizes)
         failures
         prog'
   where
-    genPrelude TargetOpenCL = genOpenClPrelude
-    genPrelude TargetCUDA = const genCUDAPrelude
+    genPrelude TargetMetal = const genMetalPrelude
 
 -- | Due to simplifications after kernel extraction, some threshold
 -- parameters may contain KernelPaths that reference threshold
@@ -100,7 +198,7 @@ pointerQuals "constant" = return [C.ctyquals|__constant|]
 pointerQuals "write_only" = return [C.ctyquals|__write_only|]
 pointerQuals "read_only" = return [C.ctyquals|__read_only|]
 pointerQuals "kernel" = return [C.ctyquals|__kernel|]
-pointerQuals s = error $ "'" ++ s ++ "' is not an OpenCL kernel address space."
+pointerQuals s = error $ "'" ++ s ++ "' is not an Metal kernel address space."
 
 -- In-kernel name and per-workgroup size in bytes.
 type LocalMemoryUse = (VName, Count Bytes Exp)
@@ -121,38 +219,38 @@ newKernelState failures = KernelState mempty failures 0 False False
 errorLabel :: KernelState -> String
 errorLabel = ("error_" ++) . show . kernelNextSync
 
-data ToOpenCL = ToOpenCL
-  { clGPU :: M.Map KernelName (KernelSafety, C.Func),
-    clDevFuns :: M.Map Name (C.Definition, C.Func),
-    clUsedTypes :: S.Set PrimType,
-    clSizes :: M.Map Name SizeClass,
-    clFailures :: [FailureMsg]
+data ToMetal = ToMetal
+  { metalGPU :: M.Map KernelName (KernelSafety, C.Func),
+    metalDevFuns :: M.Map Name (C.Definition, C.Func),
+    metalUsedTypes :: S.Set PrimType,
+    metalSizes :: M.Map Name SizeClass,
+    metalFailures :: [FailureMsg]
   }
 
-initialOpenCL :: ToOpenCL
-initialOpenCL = ToOpenCL mempty mempty mempty mempty mempty
+initialMetal :: ToMetal
+initialMetal = ToMetal mempty mempty mempty mempty mempty
 
 type AllFunctions = ImpGPU.Functions ImpGPU.HostOp
 
 lookupFunction :: Name -> AllFunctions -> Maybe ImpGPU.Function
 lookupFunction fname (ImpGPU.Functions fs) = lookup fname fs
 
-type OnKernelM = ReaderT AllFunctions (State ToOpenCL)
+type OnKernelM = ReaderT AllFunctions (State ToMetal)
 
 addSize :: Name -> SizeClass -> OnKernelM ()
 addSize key sclass =
   modify $ \s -> s {clSizes = M.insert key sclass $ clSizes s}
 
-onHostOp :: KernelTarget -> HostOp -> OnKernelM OpenCL
+onHostOp :: KernelTarget -> HostOp -> OnKernelM Metal
 onHostOp target (CallKernel k) = onKernel target k
 onHostOp _ (ImpGPU.GetSize v key size_class) = do
-  addSize key size_class
-  return $ ImpOpenCL.GetSize v key
+  addSize key size_class          --uint32_t threadGroupSize = _mAddFunctionPSO.GetMaxTotalThreadsPerThreadgroup();
+  return $ ImpMetal.GetSize v key --mtlpp::Size threadgroupSize = mtlpp::Size(threadGroupSize, 1, 1);
 onHostOp _ (ImpGPU.CmpSizeLe v key size_class x) = do
   addSize key size_class
-  return $ ImpOpenCL.CmpSizeLe v key x
+  return $ ImpMetal.CmpSizeLe v key x
 onHostOp _ (ImpGPU.GetSizeMax v size_class) =
-  return $ ImpOpenCL.GetSizeMax v size_class
+  return $ ImpMetal.GetSizeMax v size_class
 
 genGPUCode ::
   OpsMode ->
@@ -226,7 +324,7 @@ ensureDeviceFuns code = do
           return $ Just fname
         Nothing -> return Nothing
 
-onKernel :: KernelTarget -> Kernel -> OnKernelM OpenCL
+onKernel :: KernelTarget -> Kernel -> OnKernelM Metal
 onKernel target kernel = do
   called <- ensureDeviceFuns $ kernelBody kernel
 
@@ -255,7 +353,7 @@ onKernel target kernel = do
       -- added automatically in CCUDA.hs.
       (perm_params, block_dim_init) =
         case (target, num_groups) of
-          (TargetCUDA, [_, _, _]) ->
+          (TargetMetal, [_, _, _]) ->
             ( [ [C.cparam|const int block_dim0|],
                 [C.cparam|const int block_dim1|],
                 [C.cparam|const int block_dim2|]
@@ -337,7 +435,7 @@ onKernel target kernel = do
                 }|]
   modify $ \s ->
     s
-      { clGPU = M.insert name (safety, kernel_fun) $ clGPU s,
+      { mtlGPU = M.insert name (safety, kernel_fun) $ mtlGPU s,
         clUsedTypes = typesInKernel kernel <> clUsedTypes s,
         clFailures = kernelFailures kstate
       }
@@ -354,14 +452,14 @@ onKernel target kernel = do
     num_groups = kernelNumGroups kernel
     group_size = kernelGroupSize kernel
 
-    prepareLocalMemory TargetOpenCL (mem, size) = do
+    prepareLocalMemory TargetMetal (mem, size) = do
       mem_aligned <- newVName $ baseString mem ++ "_aligned"
       return
         ( Just $ SharedMemoryKArg size,
           Just [C.cparam|__local volatile typename int64_t* $id:mem_aligned|],
           [C.citem|__local volatile unsigned char* restrict $id:mem = (__local volatile unsigned char*) $id:mem_aligned;|]
         )
-    prepareLocalMemory TargetCUDA (mem, size) = do
+    prepareLocalMemory TargetMetal (mem, size) = do
       param <- newVName $ baseString mem ++ "_offset"
       return
         ( Just $ SharedMemoryKArg size,
@@ -373,7 +471,7 @@ useAsParam :: KernelUse -> Maybe (C.Param, [C.BlockItem])
 useAsParam (ScalarUse name pt) = do
   let name_bits = zEncodeString (pretty name) <> "_bits"
       ctp = case pt of
-        -- OpenCL does not permit bool as a kernel parameter type.
+        -- Metal may or may not permit bool as a kernel parameter type.
         Bool -> [C.cty|unsigned char|]
         Unit -> [C.cty|unsigned char|]
         _ -> primStorageType pt
@@ -405,8 +503,8 @@ constDef (ConstUse v e) =
     undef = "#undef " ++ pretty (C.toIdent v mempty)
 constDef _ = Nothing
 
-openClCode :: [C.Func] -> T.Text
-openClCode kernels =
+metalCode :: [C.Func] -> T.Text
+metalCode kernels =
   prettyText [C.cunit|$edecls:funcs|]
   where
     funcs =
@@ -414,67 +512,10 @@ openClCode kernels =
         | kernel_func <- kernels
       ]
 
-genOpenClPrelude :: S.Set PrimType -> T.Text
-genOpenClPrelude ts =
+genMetalPrelude :: T.Text
+genMetalPrelude =
   [untrimming|
-// Clang-based OpenCL implementations need this for 'static' to work.
-#ifdef cl_clang_storage_class_specifiers
-#pragma OPENCL EXTENSION cl_clang_storage_class_specifiers : enable
-#endif
-#pragma OPENCL EXTENSION cl_khr_byte_addressable_store : enable
-$enable_f64
-// Some OpenCL programs dislike empty progams, or programs with no kernels.
-// Declare a dummy kernel to ensure they remain our friends.
-__kernel void dummy_kernel(__global unsigned char *dummy, int n)
-{
-    const int thread_gid = get_global_id(0);
-    if (thread_gid >= n) return;
-}
-
-#pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
-#pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable
-
-typedef char int8_t;
-typedef short int16_t;
-typedef int int32_t;
-typedef long int64_t;
-
-typedef uchar uint8_t;
-typedef ushort uint16_t;
-typedef uint uint32_t;
-typedef ulong uint64_t;
-
-// NVIDIAs OpenCL does not create device-wide memory fences (see #734), so we
-// use inline assembly if we detect we are on an NVIDIA GPU.
-#ifdef cl_nv_pragma_unroll
-static inline void mem_fence_global() {
-  asm("membar.gl;");
-}
-#else
-static inline void mem_fence_global() {
-  mem_fence(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
-}
-#endif
-static inline void mem_fence_local() {
-  mem_fence(CLK_LOCAL_MEM_FENCE);
-}
-|]
-    <> halfH
-    <> cScalarDefs
-    <> atomicsH
-  where
-    enable_f64
-      | FloatType Float64 `S.member` ts =
-        [untrimming|
-         #pragma OPENCL EXTENSION cl_khr_fp64 : enable
-         #define FUTHARK_F64_ENABLED
-         |]
-      | otherwise = mempty
-
-genCUDAPrelude :: T.Text
-genCUDAPrelude =
-  [untrimming|
-#define FUTHARK_CUDA
+#define FUTHARK_METAL
 #define FUTHARK_F64_ENABLED
 
 typedef char int8_t;
@@ -489,86 +530,168 @@ typedef uint8_t uchar;
 typedef uint16_t ushort;
 typedef uint32_t uint;
 typedef uint64_t ulong;
-#define __kernel extern "C" __global__ __launch_bounds__(MAX_THREADS_PER_BLOCK)
 #define __global
 #define __local
 #define __private
 #define __constant
 #define __write_only
 #define __read_only
-
-static inline int get_group_id_fn(int block_dim0, int block_dim1, int block_dim2, int d) {
-  switch (d) {
-    case 0: d = block_dim0; break;
-    case 1: d = block_dim1; break;
-    case 2: d = block_dim2; break;
-  }
-  switch (d) {
-    case 0: return blockIdx.x;
-    case 1: return blockIdx.y;
-    case 2: return blockIdx.z;
-    default: return 0;
-  }
-}
-#define get_group_id(d) get_group_id_fn(block_dim0, block_dim1, block_dim2, d)
-
-static inline int get_num_groups_fn(int block_dim0, int block_dim1, int block_dim2, int d) {
-  switch (d) {
-    case 0: d = block_dim0; break;
-    case 1: d = block_dim1; break;
-    case 2: d = block_dim2; break;
-  }
-  switch(d) {
-    case 0: return gridDim.x;
-    case 1: return gridDim.y;
-    case 2: return gridDim.z;
-    default: return 0;
-  }
-}
-#define get_num_groups(d) get_num_groups_fn(block_dim0, block_dim1, block_dim2, d)
-
-static inline int get_local_id(int d) {
-  switch (d) {
-    case 0: return threadIdx.x;
-    case 1: return threadIdx.y;
-    case 2: return threadIdx.z;
-    default: return 0;
-  }
-}
-
-static inline int get_local_size(int d) {
-  switch (d) {
-    case 0: return blockDim.x;
-    case 1: return blockDim.y;
-    case 2: return blockDim.z;
-    default: return 0;
-  }
-}
-
-static inline int get_global_id_fn(int block_dim0, int block_dim1, int block_dim2, int d) {
-  return get_group_id(d) * get_local_size(d) + get_local_id(d);
-}
-#define get_global_id(d) get_global_id_fn(block_dim0, block_dim1, block_dim2, d)
-
-static inline int get_global_size(int block_dim0, int block_dim1, int block_dim2, int d) {
-  return get_num_groups(d) * get_local_size(d);
-}
-
-#define CLK_LOCAL_MEM_FENCE 1
-#define CLK_GLOBAL_MEM_FENCE 2
-static inline void barrier(int x) {
-  __syncthreads();
-}
-static inline void mem_fence_local() {
-  __threadfence_block();
-}
-static inline void mem_fence_global() {
-  __threadfence();
-}
-
 #define NAN (0.0/0.0)
 #define INFINITY (1.0/0.0)
-extern volatile __shared__ unsigned char shared_mem[];
+
+
+class MetalEngine
+{
+    public:
+        mtlpp::Device _mDevice = mtlpp::Device::CreateSystemDefaultDevice();
+
+        // The compute pipeline generated from the compute kernel in the .metal shader file.
+        mtlpp::ComputePipelineState _mAddFunctionPSO;
+
+        // The command queue used to pass commands to the device.
+        mtlpp::CommandQueue _mCommandQueue;
+
+        // Buffers to hold data.
+        mtlpp::Buffer _mBufferA;
+        mtlpp::Buffer _mBufferB;
+        mtlpp::Buffer _mBufferResult;
+
+    MetalEngine(mtlpp::Device device)
+    {
+        _mDevice = device;
+        ns::Error* error = NULL;
+
+        // Load the shader files with a .metal file extension in the project
+
+        mtlpp::Library defaultLibrary = device.NewLibrary("/Users/sasori/Desktop/GitHub/mtlpp/build/macos_10.12/add.metallib", error);//device.NewDefaultLibrary();
+        if (defaultLibrary.GetFunctionNames() == NULL)
+        {
+            printf("Failed to find the default library.\n");
+
+        }
+        mtlpp::Function addFunction = defaultLibrary.NewFunction("mtlAddArrays");
+
+        // Create a compute pipeline state object.
+        _mAddFunctionPSO = device.NewComputePipelineState(addFunction, error);
+    
+        _mCommandQueue = device.NewCommandQueue();
+    }
+
+    MetalEngine(mtlpp::Device device, const char* shaderSrc, ns::String functionName)
+    {
+        _mDevice = device;
+        ns::Error* error = NULL;
+
+        // Load the shader files with a .metal file extension in the project
+
+        mtlpp::Library defaultLibrary = device.NewLibrary(shaderSrc, mtlpp::CompileOptions(), error);//device.NewDefaultLibrary();
+        if (defaultLibrary.GetFunctionNames() == NULL)
+        {
+            printf("Failed to find the default library.\n");
+
+        }
+        mtlpp::Function function = defaultLibrary.NewFunction(functionName);
+
+        // Create a compute pipeline state object.
+        _mAddFunctionPSO = device.NewComputePipelineState(function, error);
+    
+        _mCommandQueue = device.NewCommandQueue();
+    }
+
+    void generateRandomFloatData(mtlpp::Buffer buffer)
+    {
+        float* dataPtr = (float*)buffer.GetContents();
+
+        for (unsigned long index = 0; index < arrayLength; index++)
+        {
+            dataPtr[index] = (float)rand()/(float)(RAND_MAX);
+        }
+    }
+
+    void prepareData(mtlpp::Device device)
+    {
+        // Allocate three buffers to hold our initial data and the result.
+        _mBufferA = device.NewBuffer(bufferSize, mtlpp::ResourceOptions::StorageModeShared);
+        _mBufferB = device.NewBuffer(bufferSize, mtlpp::ResourceOptions::StorageModeShared);
+        _mBufferResult = device.NewBuffer(bufferSize, mtlpp::ResourceOptions::StorageModeShared);
+
+        generateRandomFloatData(_mBufferA);
+        generateRandomFloatData(_mBufferB);
+    }
+
+
+    void sendComputeCommand(mtlpp::CommandQueue commandQueue)
+    {
+        // Create a command buffer to hold commands.
+        mtlpp::CommandBuffer commandBuffer = commandQueue.CommandBuffer();
+        // Start a compute pass.
+        mtlpp::ComputeCommandEncoder computeEncoder = commandBuffer.ComputeCommandEncoder();// computeCommandEncoder];
+
+        encodeAddCommand(computeEncoder);
+        // End the compute pass.
+        computeEncoder.EndEncoding();
+
+        // Execute the command.
+        commandBuffer.Commit();
+
+        // Normally, you want to do other work in your app while the GPU is running,
+        // but in this example, the code simply blocks until the calculation is complete.
+        commandBuffer.WaitUntilCompleted();
+
+        verifyResults();
+    }
+
+
+    void encodeAddCommand(mtlpp::ComputeCommandEncoder computeEncoder) {
+
+        // Encode the pipeline state object and its parameters.
+        computeEncoder.SetComputePipelineState(_mAddFunctionPSO);
+        computeEncoder.SetBuffer(_mBufferA, 0, 0);
+        computeEncoder.SetBuffer(_mBufferB, 0, 1);
+        computeEncoder.SetBuffer(_mBufferResult, 0, 2);
+        //_mBufferResult offset:x atIndex:y
+
+        mtlpp::Size gridSize = mtlpp::Size(arrayLength, 1, 1);
+
+        // Calculate a threadgroup size.
+        uint32_t threadGroupSize = _mAddFunctionPSO.GetMaxTotalThreadsPerThreadgroup();
+        if (threadGroupSize > arrayLength)
+        {
+            threadGroupSize = arrayLength;
+        }
+        mtlpp::Size threadgroupSize = mtlpp::Size(threadGroupSize, 1, 1);
+
+        // Encode the compute command.
+        computeEncoder.DispatchThreadgroups(gridSize, threadgroupSize);
+    }
+
+
+    void verifyResults()
+    {
+        float* a = (float*)_mBufferA.GetContents();
+        float* b = (float*)_mBufferB.GetContents();
+        float* result = (float*)_mBufferResult.GetContents();
+
+        for (unsigned long index = 0; index < arrayLength; index++)
+        {
+            printf("Dot Product: index=%lu result=%g(r+a*b)\n",
+            index, result[index] + a[index] * b[index]);
+
+            // if (result[index] != (a[index] + b[index]))
+            // {
+            //     printf("Compute ERROR: index=%lu result=%g vs %g=r+a*b\n",
+            //         index, result[index], a[index] + b[index]);
+            //     //assert(result[index] == (a[index] + b[index]));
+            // }
+            // else{
+            //        printf("Compute MATCH: index=%lu result=%g vs %g=r+a*b\n",
+            //         index, result[index], a[index] + b[index]);
+            // }
+        }
+        printf("Compute results as expected\n");
+    }
+};
+
 |]
     <> halfH
     <> cScalarDefs
