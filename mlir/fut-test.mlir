@@ -1,61 +1,36 @@
-// example ::= `b` (`an` | `om`) * `a`
-// toplevel := (operation | attribute-alias-def | type-alias-def)*
-
-// Compute A*B using an implementation of multiply kernel and print the
-// result using a TensorFlow op. The dimensions of A and B are partially
-// known. The shapes are assumed to match.
-func @mul(%A: tensor<100x?xf32>, %B: tensor<?x50xf32>) -> (tensor<100x50xf32>) {
-  // Compute the inner dimension of %A using the dim operation.
-  %n = memref.dim %A, 1 : tensor<100x?xf32>
-
-  // Allocate addressable "buffers" and copy tensors %A and %B into them.
-  %A_m = memref.alloc(%n) : memref<100x?xf32>
-  memref.tensor_store %A to %A_m : memref<100x?xf32>
-
-  %B_m = memref.alloc(%n) : memref<?x50xf32>
-  memref.tensor_store %B to %B_m : memref<?x50xf32>
-
-  // Call function @multiply passing memrefs as arguments,
-  // and getting returned the result of the multiplication.
-  %C_m = call @multiply(%A_m, %B_m)
-          : (memref<100x?xf32>, memref<?x50xf32>) -> (memref<100x50xf32>)
-
-  memref.dealloc %A_m : memref<100x?xf32>
-  memref.dealloc %B_m : memref<?x50xf32>
-
-  // Load the buffer data into a higher level "tensor" value.
-  %C = memref.tensor_load %C_m : memref<100x50xf32>
-  memref.dealloc %C_m : memref<100x50xf32>
-
-  // Call TensorFlow built-in function to print the result tensor.
-  "tf.Print"(%C){message: "mul result"}
-                  : (tensor<100x50xf32) -> (tensor<100x50xf32>)
-
-  return %C : tensor<100x50xf32>
+func @foo(%arg0: i32, %arg1: i64) -> (i32, i64) {
+  return %arg0, %arg1 : i32, i64
+}
+func @bar() {
+  %0 = arith.constant 42 : i32
+  %1 = arith.constant 17 : i64
+  %2:2 = call @foo(%0, %1) : (i32, i64) -> (i32, i64)
+  "use_i32"(%2#0) : (i32) -> ()
+  "use_i64"(%2#1) : (i64) -> ()
 }
 
-// A function that multiplies two memrefs and returns the result.
-func @multiply(%A: memref<100x?xf32>, %B: memref<?x50xf32>)
-          -> (memref<100x50xf32>)  {
-  // Compute the inner dimension of %A.
-  %n = memref.dim %A, 1 : memref<100x?xf32>
+// is transformed into
 
-  // Allocate memory for the multiplication result.
-  %C = memref.alloc() : memref<100x50xf32>
+llvm.func @foo(%arg0: i32, %arg1: i64) -> !llvm.struct<(i32, i64)> {
+  // insert the vales into a structure
+  %0 = llvm.mlir.undef : !llvm.struct<(i32, i64)>
+  %1 = llvm.insertvalue %arg0, %0[0] : !llvm.struct<(i32, i64)>
+  %2 = llvm.insertvalue %arg1, %1[1] : !llvm.struct<(i32, i64)>
 
-  // Multiplication loop nest.
-  affine.for %i = 0 to 100 {
-     affine.for %j = 0 to 50 {
-        memref.store 0 to %C[%i, %j] : memref<100x50xf32>
-        affine.for %k = 0 to %n {
-           %a_v  = memref.load %A[%i, %k] : memref<100x?xf32>
-           %b_v  = memref.load %B[%k, %j] : memref<?x50xf32>
-           %prod = arith.mulf %a_v, %b_v : f32
-           %c_v  = memref.load %C[%i, %j] : memref<100x50xf32>
-           %sum  = arith.addf %c_v, %prod : f32
-           memref.store %sum, %C[%i, %j] : memref<100x50xf32>
-        }
-     }
-  }
-  return %C : memref<100x50xf32>
+  // return the structure value
+  llvm.return %2 : !llvm.struct<(i32, i64)>
+}
+llvm.func @bar() {
+  %0 = llvm.mlir.constant(42 : i32) : i32
+  %1 = llvm.mlir.constant(17) : i64
+
+  // call and extract the values from the structure
+  %2 = llvm.call @bar(%0, %1)
+     : (i32, i32) -> !llvm.struct<(i32, i64)>
+  %3 = llvm.extractvalue %2[0] : !llvm.struct<(i32, i64)>
+  %4 = llvm.extractvalue %2[1] : !llvm.struct<(i32, i64)>
+
+  // use as before
+  "use_i32"(%3) : (i32) -> ()
+  "use_i64"(%4) : (i64) -> ()
 }
