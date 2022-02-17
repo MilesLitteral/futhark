@@ -129,7 +129,7 @@ cliOptions =
            }
        ]
 
-writeMetalScalar :: GC.WriteScalar OpenCL ()
+writeMetalScalar :: GC.WriteScalar Metal ()
 writeMetalScalar mem idx t "device" _ val = do
   val' <- newVName "write_tmp"
   let (bef, aft) = profilingEnclosure copyScalarToDev
@@ -145,7 +145,7 @@ writeMetalScalar mem idx t "device" _ val = do
 writeMetalScalar _ _ _ space _ _ =
   error $ "Cannot write to '" ++ space ++ "' memory space."
 
-readMetalScalar :: GC.ReadScalar OpenCL ()
+readMetalScalar :: GC.ReadScalar Metal ()
 readMetalScalar mem idx t "device" _ = do
   val <- newVName "read_res"
   let (bef, aft) = profilingEnclosure copyScalarFromDev
@@ -167,7 +167,7 @@ readMetalScalar mem idx t "device" _ = do
 readMetalScalar _ _ _ space _ =
   error $ "Cannot write to '" ++ space ++ "' memory space."
 
-allocateMetalBuffer :: GC.Allocate OpenCL ()
+allocateMetalBuffer :: GC.Allocate Metal ()
 allocateMetalBuffer mem size tag "device" =
   GC.stm [C.cstm|ctx->error = CUDA_SUCCEED_NONFATAL(metal_alloc(&ctx->metal, (size_t)$exp:size, $exp:tag, &$exp:mem));|]
 allocateMetalBuffer _ _ _ space =
@@ -204,7 +204,7 @@ copyMetalMemory dstmem dstidx dstSpace srcmem srcidx srcSpace nbytes = do
           ++ show srcSpace
           ++ "'."
 
-staticMetalArray :: GC.StaticArray OpenCL ()
+staticMetalArray :: GC.StaticArray Metal ()
 staticMetalArray name "device" t vs = do
   let ct = GC.primTypeToCType t
   name_realtype <- newVName $ baseString name ++ "_realtype"
@@ -236,12 +236,12 @@ staticMetalArray _ space _ _ =
     "Metal backend cannot create static array in '" ++ space
       ++ "' memory space"
 
-metalMemoryType :: GC.MemoryType OpenCL ()
+metalMemoryType :: GC.MemoryType Metal ()
 metalMemoryType "device" = return [C.cty|typename CUdeviceptr|]
 metalMemoryType space =
   error $ "Metal backend does not support '" ++ space ++ "' memory space."
 
-callKernel :: GC.OpCompiler OpenCL ()
+callKernel :: GC.OpCompiler Metal ()
 callKernel (GetSize v key) =
   GC.stm [C.cstm|$id:v = *ctx->tuning_params.$id:key;|]
 callKernel (CmpSizeLe v key x) = do
