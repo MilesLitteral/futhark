@@ -33,25 +33,6 @@ import qualified Language.C.Syntax as C
 errorMsgNumArgs :: ErrorMsg a -> Int
 errorMsgNumArgs = length . errorMsgArgTypes
 
--- | Block items to put before and after a thing to be profiled.
-profilingEnclosure :: Name -> ([C.BlockItem], [C.BlockItem])
-profilingEnclosure name =
-  ( [C.citems|
-      typename metalEvent_t *pevents = NULL;
-      if (ctx->profiling && !ctx->profiling_paused) {
-        pevents = metal_get_events(&ctx->metal,
-                                  &ctx->$id:(kernelRuns name),
-                                  &ctx->$id:(kernelRuntime name));
-        assert(metalEventRecord(pevents[0], 0));
-      }
-      |],
-    [C.citems|
-      if (pevents != NULL) {
-        assert(metalEventRecord(pevents[1], 0));
-      }
-      |]
-  )
-
 -- | Called after most code has been generated to generate the bulk of
 -- the boilerplate.
 generateBoilerplate ::
@@ -164,57 +145,8 @@ generateContextFuns cfg cost_centres kernels sizes failures = do
   GC.publicDef_ "context_new" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg);|],
       [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg) {
-                 assert(!cfg->in_use);
-                 struct $id:ctx* ctx = (struct $id:ctx*) malloc(sizeof(struct $id:ctx));
-                 if (ctx == NULL) {
-                   return NULL;
-                 }
-                 ctx->cfg = cfg;
-                 ctx->cfg->in_use = 1;
-                 ctx->debugging = ctx->detail_memory = cfg->cu_cfg.debugging;
-                 ctx->profiling = cfg->profiling;
-                 ctx->profiling_paused = 0;
-                 ctx->logging = cfg->cu_cfg.logging;
-                 ctx->error = NULL;
-                 ctx->log = stderr;
-                 ctx->metal.profiling_records_capacity = 200;
-                 ctx->metal.profiling_records_used = 0;
-                 ctx->metal.profiling_records =
-                   malloc(ctx->metal.profiling_records_capacity *
-                          sizeof(struct profiling_record));
-
-                 ctx->metal.cfg = cfg->cu_cfg;
-                 create_lock(&ctx->lock);
-
-                 ctx->failure_is_an_option = 0;
-                 ctx->total_runs = 0;
-                 ctx->total_runtime = 0;
-                 $stms:init_fields
-
-                 ctx->error = metal_setup(&ctx->metal, metal_program, cfg->nvrtc_opts);
-
-                 if (ctx->error != NULL) {
-                   return NULL;
-                 }
-
-                 typename int32_t no_error = -1;
-                 assert(cuMemAlloc(&ctx->global_failure, sizeof(no_error)));
-                 assert(cuMemcpyHtoD(ctx->global_failure, &no_error, sizeof(no_error)));
-                 // The +1 is to avoid zero-byte allocations.
-                 assert(cuMemAlloc(&ctx->global_failure_args, sizeof(int64_t)*($int:max_failure_args+1)));
-
-                 $stms:init_kernel_fields
-
-                 $stms:final_inits
-                 $stms:set_tuning_params
-
-                 init_constants(ctx);
-                 // Clear the free list of any deallocations that occurred while initialising constants.
-                 assert(metal_free_all(&ctx->metal));
-
-                 futhark_context_sync(ctx);
-
-                 return ctx;
+                mtlpp::Device device = mtlpp::Device::CreateSystemDefaultDevice();
+                return device;
                }|]
     )
 
