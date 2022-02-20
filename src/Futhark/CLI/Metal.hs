@@ -1,13 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 
--- | @futhark cuda@
+-- | @futhark metal@
 module Futhark.CLI.Metal (main) where
 
 import Futhark.Actions (compileMetalAction)
 import Futhark.Compiler.CLI
 import Futhark.Passes (gpuPipeline)
 
--- | Run @futhark cuda@.
+-- | Run @futhark metal@.
 main :: String -> [String] -> IO ()
 main = compilerMain
   ()
