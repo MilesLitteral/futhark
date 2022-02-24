@@ -38,3 +38,16 @@ We try to make use of GitHub issues for organising our work.  Issues
 tagged with
 [good first issue](https://github.com/diku-dk/futhark/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
 do not require deep knowledge of the code base.
+
+
+FUTHARK METAL
+=============
+
+In Brief: this fork of the main Futhark Project hopes to accomplish execution of Futhark on M1 Apple GPU/APUs by creating an addon module which can then create and compile Metal Shader Language Code (Instead of CUDA or OpenCL) on Mac, therefore opening the floodgates on platform agnostic GPU support that Futhark provides
+
+This project has further, future, steps which includes creating an MLIR (LLVM Dialect) backend for Futhark though this is a future objective.
+
+Issues and progress are tracked through this repository, it's Project page on @MilesLitteral GitHub.
+
+Discussion, technical talks, brainstorming and drafting are all posted to the FM Gist, feel free to read or contribute to the conversation: 
+https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
