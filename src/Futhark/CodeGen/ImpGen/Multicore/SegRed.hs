@@ -22,7 +22,7 @@ compileSegRed ::
   [SegBinOp MCMem] ->
   KernelBody MCMem ->
   TV Int32 ->
-  MulticoreGen Imp.MCCode
+  MulticoreGen MCCode
 compileSegRed pat space reds kbody nsubtasks =
   compileSegRed' pat space reds nsubtasks $ \red_cont ->
     compileStms mempty (kernelBodyStms kbody) $ do

@@ -13,7 +13,7 @@ import Futhark.Transform.Rename
 
 writeResult ::
   [VName] ->
-  PatElemT dec ->
+  PatElem dec ->
   KernelResult ->
   MulticoreGen ()
 writeResult is pe (Returns _ _ se) =

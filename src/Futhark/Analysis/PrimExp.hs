@@ -23,12 +23,13 @@ module Futhark.Analysis.PrimExp
     leafExpTypes,
     true,
     false,
+    fromBool,
     constFoldPrimExp,
 
     -- * Construction
     module Futhark.IR.Primitive,
     NumExp (..),
-    IntExp,
+    IntExp (..),
     FloatExp (..),
     sExt,
     zExt,
@@ -296,7 +297,7 @@ instance FloatExp Float where
 instance FloatExp Double where
   fromRational' = TPrimExp . ValueExp . FloatValue . Float64Value . fromRational
   expFloatType = const Float64
-  
+
 instance (NumExp t, Pretty v) => Num (TPrimExp t v) where
   TPrimExp x + TPrimExp y
     | Just z <-
@@ -494,7 +495,6 @@ sExt it e
   | primExpIntType e == it = e
   | otherwise = ConvOpExp (SExt (primExpIntType e) it) e
 
-
 -- | Untyped smart constructor for zero extension that does a bit of
 -- constant folding.
 zExt :: IntType -> PrimExp v -> PrimExp v
@@ -587,6 +587,10 @@ primExpIntType e = case primExpType e of
 true, false :: TPrimExp Bool v
 true = TPrimExp $ ValueExp $ BoolValue True
 false = TPrimExp $ ValueExp $ BoolValue False
+
+-- | Conversion from Bool to 'TPrimExp'
+fromBool :: Bool -> TPrimExp Bool v
+fromBool b = if b then true else false
 
 -- | Boolean negation smart constructor.
 bNot :: TPrimExp Bool v -> TPrimExp Bool v

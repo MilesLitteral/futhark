@@ -344,7 +344,7 @@ tileDoLoop ::
   Names ->
   (Stms GPU, Tiling, TiledBody) ->
   [Type] ->
-  Pat GPU ->
+  Pat Type ->
   StmAux (ExpDec GPU) ->
   [(FParam GPU, SubExp)] ->
   VName ->
@@ -625,7 +625,7 @@ protectOutOfBounds desc in_bounds ts m = do
 postludeGeneric ::
   Tiling ->
   PrivStms ->
-  Pat GPU ->
+  Pat Type ->
   [VName] ->
   Stms GPU ->
   Result ->
@@ -655,7 +655,7 @@ tileGeneric ::
   DoTiling gtids kdims ->
   SegLevel ->
   [Type] ->
-  Pat GPU ->
+  Pat Type ->
   gtids ->
   kdims ->
   SubExp ->
@@ -722,8 +722,6 @@ tileGeneric doTiling initial_lvl res_ts pat gtids kdims w form inputs poststms p
 
       -- Create a SegMap that takes care of the postlude for every thread.
       postludeGeneric tiling privstms pat accs' poststms poststms_res res_ts
-
-data TileKind = TilePartial | TileFull
 
 mkReadPreludeValues :: [VName] -> [VName] -> ReadPrelude
 mkReadPreludeValues prestms_live_arrs prestms_live slice =

@@ -13,6 +13,7 @@ import Futhark.CodeGen.ImpGen.GPU
 import Futhark.CodeGen.ImpGen.GPU.ToMetal
 import Futhark.IR.GPUMem
 import Futhark.MonadFreshNames
+import Language.Futhark.Warnings (Warnings)
 
 -- | Compile the program to ImpCode with Metal kernels.
 compileProg :: MonadFreshNames m => Prog GPUMem -> m (Warnings, Metal.Program)

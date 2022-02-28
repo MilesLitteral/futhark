@@ -29,7 +29,7 @@ import qualified Futhark.IR.SOACS as I
 import Futhark.Internalise
 import Futhark.MonadFreshNames
 import Futhark.Pipeline
-import qualified Futhark.TypeCheck as I
+import qualified Futhark.IR.TypeCheck as I
 import Futhark.Util.Log
 import Futhark.Util.Pretty (ppr, prettyText)
 import qualified Language.Futhark as E

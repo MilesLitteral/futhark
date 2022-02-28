@@ -13,13 +13,14 @@ module Futhark.CodeGen.ImpGen.Multicore.Base
     renameHistOpLambda,
     atomicUpdateLocking,
     AtomicUpdate (..),
+    DoAtomicUpdate,
     Locking (..),
     getSpace,
+    getLoopBounds,
     getIterationDomain,
     getReturnParams,
-    getLoopBounds,
     segOpString,
-    generateChunkLoop
+    generateChunkLoop,
   )
 where
 
@@ -103,7 +104,7 @@ getIterationDomain _ space = do
 
 -- When the SegRed's return value is a scalar
 -- we perform a call by value-result in the segop function
-getReturnParams :: Pat MCMem -> SegOp () MCMem -> MulticoreGen [Imp.Param]
+getReturnParams :: Pat LetDecMem -> SegOp () MCMem -> MulticoreGen [Imp.Param]
 getReturnParams pat SegRed {} =
   -- It's a good idea to make sure any prim values are initialised, as
   -- we will load them (redundantly) in the task code, and
@@ -123,7 +124,7 @@ renameSegBinOp segbinops =
 
 compileThreadResult ::
   SegSpace ->
-  PatElem MCMem ->
+  PatElem LetDecMem ->
   KernelResult ->
   MulticoreGen ()
 compileThreadResult space pe (Returns _ _ what) = do
@@ -137,10 +138,6 @@ compileThreadResult _ _ TileReturns {} =
   compilerBugS "compileThreadResult: TileReturns unhandled."
 compileThreadResult _ _ RegTileReturns {} =
   compilerBugS "compileThreadResult: RegTileReturns unhandled."
-
-freeVariables :: FreeIn a => a -> [VName] -> [VName]
-freeVariables code names =
-  namesToList $ freeIn code `namesSubtract` namesFromList names
 
 freeParams :: FreeIn a => a -> MulticoreGen [Imp.Param]
 freeParams code = do
@@ -188,7 +185,7 @@ decideScheduling code =
     else Imp.Dynamic
 
 -- | Try to extract invariant allocations.  If we assume that the
--- given 'Imp.Code' is the body of a 'SegOp', then it is always safe
+-- given 'Imp.MCCode' is the body of a 'SegOp', then it is always safe
 -- to move the immediate allocations to the prebody.
 extractAllocations :: Imp.MCCode -> (Imp.MCCode, Imp.MCCode)
 extractAllocations segop_code = f segop_code

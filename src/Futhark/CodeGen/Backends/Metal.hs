@@ -16,7 +16,6 @@ import Control.Monad
 import Data.Maybe (catMaybes)
 import qualified Data.Text as T
 import Futhark.CodeGen.Backends.Metal.Boilerplate
-import Futhark.CodeGen.Backends.Metal.Boilerplate (commonOptions, sizeLoggingCode)
 import qualified Futhark.CodeGen.Backends.GenericC as GC
 import Futhark.CodeGen.Backends.GenericC.Options
 import Futhark.CodeGen.Backends.SimpleRep (primStorageType, toStorage)
@@ -28,7 +27,7 @@ import Futhark.IR.GPUMem hiding
     GetSizeMax,
   )
 import Futhark.MonadFreshNames
-import qualified Language.C.Quote.Metal as M
+import qualified Language.C.Quote.C as C --Metal
 import NeatInterpolation (untrimming)
 
 -- | Compile the program to C with calls to Metal.
@@ -75,7 +74,7 @@ compileProg version prog = do
           GC.opsCompiler = callKernel,
           GC.opsFatMemory = True,
           GC.opsCritical =
-            ( [C.citems|printf("Warning!")|], --replace these
+            ( [C.citems|printf("Warning!");|], --replace these
               [C.citems|CUDA_SUCCEED_FATAL(cuCtxPopCurrent(&ctx->metal.cu_ctx));|]
             )
         }
@@ -87,8 +86,7 @@ compileProg version prog = do
 
 cliOptions :: [Option]
 cliOptions =
-  commonOptions
-    ++ [ Option
+      [ Option
            { optionLongName = "dump-metal",
              optionShortName = Nothing,
              optionArgument = RequiredArgument "FILE",
@@ -132,15 +130,12 @@ cliOptions =
 writeMetalScalar :: GC.WriteScalar Metal ()
 writeMetalScalar mem idx t "device" _ val = do
   val' <- newVName "write_tmp"
-  let (bef, aft) = profilingEnclosure copyScalarToDev
   GC.item
     [C.citem|{$ty:t $id:val' = $exp:val;
-                  $items:bef
                   CUDA_SUCCEED_OR_RETURN(
                     cuMemcpyHtoD($exp:mem + $exp:idx * sizeof($ty:t),
                                  &$id:val',
                                  sizeof($ty:t)));
-                  $items:aft
                  }|]
 writeMetalScalar _ _ _ space _ _ =
   error $ "Cannot write to '" ++ space ++ "' memory space."
@@ -148,18 +143,15 @@ writeMetalScalar _ _ _ space _ _ =
 readMetalScalar :: GC.ReadScalar Metal ()
 readMetalScalar mem idx t "device" _ = do
   val <- newVName "read_res"
-  let (bef, aft) = profilingEnclosure copyScalarFromDev
   mapM_
     GC.item
     [C.citems|
        $ty:t $id:val;
        {
-       $items:bef
        CUDA_SUCCEED_OR_RETURN(
           cuMemcpyDtoH(&$id:val,
                        $exp:mem + $exp:idx * sizeof($ty:t),
                        sizeof($ty:t)));
-        $items:aft
        }
        |]
   GC.stm [C.cstm|if (futhark_context_sync(ctx) != 0) { return 1; }|]
@@ -168,10 +160,10 @@ readMetalScalar _ _ _ space _ =
   error $ "Cannot write to '" ++ space ++ "' memory space."
 
 allocateMetalBuffer :: GC.Allocate Metal ()
-allocateMetalBuffer mem size tag "device" =
-  GC.stm [C.cstm|ctx->error = CUDA_SUCCEED_NONFATAL(metal_alloc(&ctx->metal, (size_t)$exp:size, $exp:tag, &$exp:mem));|]
-allocateMetalBuffer _ _ _ space =
-  error $ "Cannot allocate in '" ++ space ++ "' memory space."
+allocateMetalBuffer buffer "device" =
+  GC.stm [C.cstm|$device.NewBuffer(buffer);|]
+allocateMetalBuffer _  space =
+  error $ "Cannot allocate in '" ++ show space ++ "' memory space."
 
 deallocateMetalBuffer :: GC.Deallocate Metal ()
 deallocateMetalBuffer mem tag "device" =
@@ -182,21 +174,17 @@ deallocateMetalBuffer _ _ space =
 copyMetalMemory :: GC.Copy Metal ()
 copyMetalMemory dstmem dstidx dstSpace srcmem srcidx srcSpace nbytes = do
   let (fn, prof) = memcpyFun dstSpace srcSpace
-      (bef, aft) = profilingEnclosure prof
   GC.item
     [C.citem|{
-                $items:bef
-                CUDA_SUCCEED_OR_RETURN(
                   $id:fn($exp:dstmem + $exp:dstidx,
                          $exp:srcmem + $exp:srcidx,
-                         $exp:nbytes));
-                $items:aft
+                         $exp:nbytes);
                 }
                 |]
   where
-    memcpyFun DefaultSpace (Space "device") = ("cuMemcpyDtoH" :: String, copyDevToHost)
-    memcpyFun (Space "device") DefaultSpace = ("cuMemcpyHtoD", copyHostToDev)
-    memcpyFun (Space "device") (Space "device") = ("cuMemcpy", copyDevToDev)
+    -- memcpyFun DefaultSpace (Space "device") = ("cuMemcpyDtoH" :: String, copyDevToHost)
+    -- memcpyFun (Space "device") DefaultSpace = ("cuMemcpyHtoD", copyHostToDev)
+    -- memcpyFun (Space "device") (Space "device") = ("cuMemcpy", copyDevToDev)
     memcpyFun _ _ =
       error $
         "Cannot copy to '" ++ show dstSpace
@@ -247,7 +235,7 @@ callKernel (GetSize v key) =
 callKernel (CmpSizeLe v key x) = do
   x' <- GC.compileExp x
   GC.stm [C.cstm|$id:v = *ctx->tuning_params.$id:key <= $exp:x';|]
-  sizeLoggingCode v key x'
+  -- sizeLoggingCode v key x'
 callKernel (GetSizeMax v size_class) =
   let field = "max_" ++ metalSizeClass size_class
    in GC.stm [C.cstm|$id:v = ctx->metal.$id:field;|]
@@ -293,42 +281,9 @@ callKernel (LaunchKernel safety kernel_name args num_blocks block_size) = do
             block_y,
             block_z
           ]
-      (bef, aft) = profilingEnclosure kernel_name
-
   GC.stm
     [C.cstm|
-    if ($exp:sizes_nonzero) {
-      int perm[3] = { 0, 1, 2 };
-
-      if ($exp:grid_y >= (1<<16)) {
-        perm[1] = perm[0];
-        perm[0] = 1;
-      }
-
-      if ($exp:grid_z >= (1<<16)) {
-        perm[2] = perm[0];
-        perm[0] = 2;
-      }
-
-      size_t grid[3];
-      grid[perm[0]] = $exp:grid_x;
-      grid[perm[1]] = $exp:grid_y;
-      grid[perm[2]] = $exp:grid_z;
-
-      void *$id:args_arr[] = { $inits:args'' };
-      typename int64_t $id:time_start = 0, $id:time_end = 0;
-      if (ctx->debugging) {
-        fprintf(ctx->log, "Launching %s with grid size [%ld, %ld, %ld] and block size [%ld, %ld, %ld]; shared memory: %d bytes.\n",
-                $string:(pretty kernel_name),
-                (long int)$exp:grid_x, (long int)$exp:grid_y, (long int)$exp:grid_z,
-                (long int)$exp:block_x, (long int)$exp:block_y, (long int)$exp:block_z,
-                (int)$exp:shared_tot);
-        $id:time_start = get_wall_time();
-      }
-      $items:bef
       sendComputeCommand(_mCommandQueue);
-      $items:aft
-      printf("Execution finished\n");
     |]
 
   when (safety >= SafetyFull) $

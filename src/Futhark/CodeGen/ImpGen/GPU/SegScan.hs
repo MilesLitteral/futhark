@@ -49,7 +49,7 @@ canBeSinglePass ops
 -- | Compile 'SegScan' instance to host-level code with calls to
 -- various kernels.
 compileSegScan ::
-  Pat GPUMem ->
+  Pat LetDecMem ->
   SegLevel ->
   SegSpace ->
   [SegBinOp GPUMem] ->
@@ -59,7 +59,7 @@ compileSegScan pat lvl space scans kbody = sWhen (0 .<. n) $ do
   emit $ Imp.DebugPrint "\n# SegScan" Nothing
   target <- hostTarget <$> askEnv
   case target of
-    CUDA
+    Metal
       | Just scan' <- canBeSinglePass scans ->
         SinglePass.compileSegScan pat lvl space scan' kbody
     _ -> TwoPass.compileSegScan pat lvl space scans kbody
