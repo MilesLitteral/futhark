@@ -311,81 +311,81 @@ jobs:
         futhark test -c --no-terminal --no-tuning --backend=python --exclude=no_python --exclude=compiled tests
         make -C tests_lib/python -j
 
-  test-opencl:
-    runs-on: ubuntu-20.04
-    needs: [build-linux-nix]
+  # test-opencl:
+  #   runs-on: ubuntu-20.04
+  #   needs: [build-linux-nix]
 
-    steps:
-    - uses: actions/checkout@v2
+  #   steps:
+  #   - uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y opencl-headers nvidia-cuda-dev nvidia-opencl-dev oclgrind python3-jsonschema
+  #   - name: Install dependencies
+  #     run: |
+  #       sudo apt-get update
+  #       sudo apt-get install -y opencl-headers nvidia-cuda-dev nvidia-opencl-dev oclgrind python3-jsonschema
 
-    - uses: actions/download-artifact@v2
-      with:
-        name: futhark-nightly-linux-x86_64.tar.xz
+  #   - uses: actions/download-artifact@v2
+  #     with:
+  #       name: futhark-nightly-linux-x86_64.tar.xz
 
-    - name: Install from nightly tarball
-      run: |
-        tar xvf futhark-nightly-linux-x86_64.tar.xz
-        make -C futhark-nightly-linux-x86_64/ install PREFIX=$HOME/.local
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+  #   - name: Install from nightly tarball
+  #     run: |
+  #       tar xvf futhark-nightly-linux-x86_64.tar.xz
+  #       make -C futhark-nightly-linux-x86_64/ install PREFIX=$HOME/.local
+  #       echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-    - run: |
-        futhark test -c --no-terminal --backend=opencl --exclude=compiled --runner=tools/oclgrindrunner.sh tests
+  #   - run: |
+  #       futhark test -c --no-terminal --backend=opencl --exclude=compiled --runner=tools/oclgrindrunner.sh tests
 
-  test-pyopencl:
-    runs-on: ubuntu-20.04
-    needs: [build-linux-nix]
+  # test-pyopencl:
+  #   runs-on: ubuntu-20.04
+  #   needs: [build-linux-nix]
 
-    steps:
-    - uses: actions/checkout@v2
+  #   steps:
+  #   - uses: actions/checkout@v2
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y opencl-headers nvidia-cuda-dev nvidia-opencl-dev oclgrind
-        sudo apt-get install -y python3-numpy python3-pyopencl
+  #   - name: Install dependencies
+  #     run: |
+  #       sudo apt-get update
+  #       sudo apt-get install -y opencl-headers nvidia-cuda-dev nvidia-opencl-dev oclgrind
+  #       sudo apt-get install -y python3-numpy python3-pyopencl
 
-    - uses: actions/download-artifact@v2
-      with:
-        name: futhark-nightly-linux-x86_64.tar.xz
+  #   - uses: actions/download-artifact@v2
+  #     with:
+  #       name: futhark-nightly-linux-x86_64.tar.xz
 
-    - name: Install from nightly tarball
-      run: |
-        tar xvf futhark-nightly-linux-x86_64.tar.xz
-        make -C futhark-nightly-linux-x86_64/ install PREFIX=$HOME/.local
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+  #   - name: Install from nightly tarball
+  #     run: |
+  #       tar xvf futhark-nightly-linux-x86_64.tar.xz
+  #       make -C futhark-nightly-linux-x86_64/ install PREFIX=$HOME/.local
+  #       echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-    - run: |
-        futhark test -c --no-terminal --backend=pyopencl --exclude=compiled --runner=tools/oclgrindrunner.sh tests
+  #   - run: |
+  #       futhark test -c --no-terminal --backend=pyopencl --exclude=compiled --runner=tools/oclgrindrunner.sh tests
 
-  test-cuda:
-    runs-on: ubuntu-20.04
-    needs: [build-linux-nix]
+  # test-cuda:
+  #   runs-on: ubuntu-20.04
+  #   needs: [build-linux-nix]
 
-    steps:
-    - uses: actions/checkout@v2
+  #   steps:
+  #   - uses: actions/checkout@v2
 
-    - name: Install OS dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y nvidia-cuda-dev
+  #   - name: Install OS dependencies
+  #     run: |
+  #       sudo apt-get update
+  #       sudo apt-get install -y nvidia-cuda-dev
 
-    - uses: actions/download-artifact@v2
-      with:
-        name: futhark-nightly-linux-x86_64.tar.xz
+  #   - uses: actions/download-artifact@v2
+  #     with:
+  #       name: futhark-nightly-linux-x86_64.tar.xz
 
-    - name: Install from nightly tarball
-      run: |
-        tar xvf futhark-nightly-linux-x86_64.tar.xz
-        make -C futhark-nightly-linux-x86_64/ install PREFIX=$HOME/.local
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
+  #   - name: Install from nightly tarball
+  #     run: |
+  #       tar xvf futhark-nightly-linux-x86_64.tar.xz
+  #       make -C futhark-nightly-linux-x86_64/ install PREFIX=$HOME/.local
+  #       echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-    - run: |
-        futhark test -C --no-terminal --backend=cuda tests
+  #   - run: |
+  #       futhark test -C --no-terminal --backend=cuda tests
 
   test-wasm:
     runs-on: ubuntu-20.04

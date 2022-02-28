@@ -71,7 +71,7 @@ import Futhark.Util.Pretty hiding (space)
 import Language.Futhark
 import Language.Futhark.Semantic
 import Language.Futhark.Warnings
-import qualified Paths_futhark
+import qualified Paths_futhark_metal
 import Prelude hiding (mapM, mod)
 
 -- | A note with extra information regarding a type error.
@@ -102,7 +102,7 @@ instance Pretty TypeError where
 errorIndexUrl :: Doc
 errorIndexUrl = version_url <> "error-index.html"
   where
-    version = Paths_futhark.version
+    version = Paths_futhark_metal.version
     base_url = "https://futhark.readthedocs.io/en/"
     version_url
       | last (Version.versionBranch version) == 0 = base_url <> "latest/"

@@ -405,17 +405,15 @@ commandLineOptions =
               action <- case arg of
                 "c" -> Right $ SeqMemAction compileCAction
                 "multicore" -> Right $ MCMemAction compileMulticoreAction
-                "opencl" -> Right $ GPUMemAction compileOpenCLAction
-                "cuda" -> Right $ GPUMemAction compileCUDAAction
+                "metal" -> Right $ GPUMemAction compileMetalAction
                 "wasm" -> Right $ SeqMemAction compileCtoWASMAction
                 "wasm-multicore" -> Right $ MCMemAction compileMulticoreToWASMAction
                 "python" -> Right $ SeqMemAction compilePythonAction
-                "pyopencl" -> Right $ GPUMemAction compilePyOpenCLAction
                 _ -> Left $ error $ "Invalid backend: " <> arg
 
               Right $ \opts -> opts {futharkAction = action}
           )
-          "c|multicore|opencl|cuda|python|pyopencl"
+          "c|multicore|metal|python"
       )
       "Run this compiler backend on pipeline result.",
     Option

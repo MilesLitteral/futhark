@@ -26,7 +26,7 @@ import Futhark.IR.Prop (isBuiltInFunction)
 import Futhark.MonadFreshNames
 import Futhark.Util (zEncodeString)
 import Futhark.Util.Pretty (prettyOneLine, prettyText)
-import qualified Language.C.Quote.Metal as C
+import qualified Language.C.Quote.OpenCL as C
 import qualified Language.C.Syntax as C
 import NeatInterpolation (untrimming)
 
@@ -266,11 +266,11 @@ errorLabel :: KernelState -> String
 errorLabel = ("error_" ++) . show . kernelNextSync
 
 data ToMetal = ToMetal
-  { metalGPU :: M.Map KernelName (KernelSafety, C.Func),
-    metalDevFuns :: M.Map Name (C.Definition, C.Func),
-    metalUsedTypes :: S.Set PrimType,
-    metalSizes :: M.Map Name SizeClass,
-    metalFailures :: [FailureMsg]
+  { mGPU :: M.Map KernelName (KernelSafety, C.Func),
+    mDevFuns :: M.Map Name (C.Definition, C.Func),
+    mUsedTypes :: S.Set PrimType,
+    mSizes :: M.Map Name SizeClass,
+    mFailures :: [FailureMsg]
   }
 
 initialMetal :: ToMetal
@@ -285,7 +285,7 @@ type OnKernelM = ReaderT AllFunctions (State ToMetal)
 
 addSize :: Name -> SizeClass -> OnKernelM ()
 addSize key sclass =
-  modify $ \s -> s {clSizes = M.insert key sclass $ clSizes s}
+  modify $ \s -> s {mSizes = M.insert key sclass $ mSizes s}
 
 onHostOp :: KernelTarget -> HostOp -> OnKernelM Metal
 onHostOp target (CallKernel k) = onKernel target k
@@ -321,7 +321,7 @@ generateDeviceFun fname host_func = do
   let device_func = fmap toDevice host_func
   when (any memParam $ functionInput host_func) bad
 
-  failures <- gets clFailures
+  failures <- gets mFailures
 
   let params =
         [ [C.cparam|__global int *global_failure|],
@@ -334,9 +334,9 @@ generateDeviceFun fname host_func = do
 
   modify $ \s ->
     s
-      { clUsedTypes = typesInCode (functionBody device_func) <> clUsedTypes s,
-        clDevFuns = M.insert fname func $ clDevFuns s,
-        clFailures = kernelFailures kstate
+      { mUsedTypes = typesInCode (functionBody device_func) <> mUsedTypes s,
+        mDevFuns = M.insert fname func $ mDevFuns s,
+        mFailures = kernelFailures kstate
       }
 
   -- Important to do this after the 'modify' call, so we propagate the
@@ -355,7 +355,7 @@ generateDeviceFun fname host_func = do
 -- it if it already exists.
 ensureDeviceFun :: Name -> ImpGPU.Function -> OnKernelM ()
 ensureDeviceFun fname host_func = do
-  exists <- gets $ M.member fname . clDevFuns
+  exists <- gets $ M.member fname . mDevFuns
   unless exists $ generateDeviceFun fname host_func
 
 ensureDeviceFuns :: ImpGPU.KernelCode -> OnKernelM [Name]
@@ -376,7 +376,7 @@ onKernel target kernel = do
 
   -- Crucial that this is done after 'ensureDeviceFuns', as the device
   -- functions may themselves define failure points.
-  failures <- gets clFailures
+  failures <- gets mFailures
 
   let (kernel_body, cstate) =
         genGPUCode KernelMode (kernelBody kernel) failures $
@@ -481,9 +481,9 @@ onKernel target kernel = do
                 }|]
   modify $ \s ->
     s
-      { mtlGPU = M.insert name (safety, kernel_fun) $ mtlGPU s,
-        clUsedTypes = typesInKernel kernel <> clUsedTypes s,
-        clFailures = kernelFailures kstate
+      { mGPU = M.insert name (safety, kernel_fun) $ mGPU s,
+        mUsedTypes = typesInKernel kernel <> mUsedTypes s,
+        mFailures = kernelFailures kstate
       }
 
   -- The argument corresponding to the global_failure parameters is

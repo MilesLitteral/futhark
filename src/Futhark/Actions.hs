@@ -13,8 +13,6 @@ module Futhark.Actions
     metricsAction,
     compileCAction,
     compileCtoWASMAction,
-    compileOpenCLAction,
-    compileCUDAAction,
     compileMetalAction,
     compileMulticoreAction,
     compileMulticoreToWASMAction,
@@ -32,11 +30,11 @@ import qualified Data.Text.IO as T
 import Futhark.Analysis.Alias
 import Futhark.Analysis.CallGraph (buildCallGraph)
 import Futhark.Analysis.Metrics
-import qualified Futhark.CodeGen.Backends.CCUDA as CCUDA
-import qualified Futhark.CodeGen.Backends.COpenCL as COpenCL
+-- import qualified Futhark.CodeGen.Backends.CCUDA as CCUDA
+-- import qualified Futhark.CodeGen.Backends.COpenCL as COpenCL
 import qualified Futhark.CodeGen.Backends.MulticoreC as MulticoreC
 import qualified Futhark.CodeGen.Backends.MulticoreWASM as MulticoreWASM
-import qualified Futhark.CodeGen.Backends.PyOpenCL as PyOpenCL
+-- import qualified Futhark.CodeGen.Backends.PyOpenCL as PyOpenCL
 import qualified Futhark.CodeGen.Backends.SequentialC as SequentialC
 import qualified Futhark.CodeGen.Backends.SequentialPython as SequentialPy
 import qualified Futhark.CodeGen.Backends.SequentialWASM as SequentialWASM
@@ -194,73 +192,6 @@ compileCAction fcfg mode outpath =
         ToServer -> do
           liftIO $ T.writeFile cpath $ SequentialC.asServer cprog
           runCC cpath outpath ["-O3", "-std=c99"] ["-lm"]
-
--- | The @futhark opencl@ action.
-compileOpenCLAction :: FutharkConfig -> CompilerMode -> FilePath -> Action GPUMem
-compileOpenCLAction fcfg mode outpath =
-  Action
-    { actionName = "Compile to OpenCL",
-      actionDescription = "Compile to OpenCL",
-      actionProcedure = helper
-    }
-  where
-    helper prog = do
-      cprog <- handleWarnings fcfg $ COpenCL.compileProg prog
-      let cpath = outpath `addExtension` "c"
-          hpath = outpath `addExtension` "h"
-          jsonpath = outpath `addExtension` "json"
-          extra_options
-            | System.Info.os == "darwin" =
-              ["-framework", "OpenCL"]
-            | System.Info.os == "mingw32" =
-              ["-lOpenCL64"]
-            | otherwise =
-              ["-lOpenCL"]
-
-      case mode of
-        ToLibrary -> do
-          let (header, impl, manifest) = COpenCL.asLibrary cprog
-          liftIO $ T.writeFile hpath $ cPrependHeader header
-          liftIO $ T.writeFile cpath $ cPrependHeader impl
-          liftIO $ T.writeFile jsonpath manifest
-        ToExecutable -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ COpenCL.asExecutable cprog
-          runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
-        ToServer -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ COpenCL.asServer cprog
-          runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
-
--- | The @futhark cuda@ action.
-compileCUDAAction :: FutharkConfig -> CompilerMode -> FilePath -> Action GPUMem
-compileCUDAAction fcfg mode outpath =
-  Action
-    { actionName = "Compile to CUDA",
-      actionDescription = "Compile to CUDA",
-      actionProcedure = helper
-    }
-  where
-    helper prog = do
-      cprog <- handleWarnings fcfg $ CCUDA.compileProg prog
-      let cpath = outpath `addExtension` "c"
-          hpath = outpath `addExtension` "h"
-          jsonpath = outpath `addExtension` "json"
-          extra_options =
-            [ "-lcuda",
-              "-lcudart",
-              "-lnvrtc"
-            ]
-      case mode of
-        ToLibrary -> do
-          let (header, impl, manifest) = CCUDA.asLibrary cprog
-          liftIO $ T.writeFile hpath $ cPrependHeader header
-          liftIO $ T.writeFile cpath $ cPrependHeader impl
-          liftIO $ T.writeFile jsonpath manifest
-        ToExecutable -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ CCUDA.asExecutable cprog
-          runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
-        ToServer -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ CCUDA.asServer cprog
-          runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
 
 -- | The @futhark metal@ action .
 {- The Following is needed:

@@ -13,6 +13,7 @@
 module Futhark.IR.SegOp
   ( SegOp (..),
     SegVirt (..),
+    SegSeqDims (..),
     segLevel,
     segBody,
     segSpace,
@@ -24,6 +25,7 @@ module Futhark.IR.SegOp
     -- * Details
     HistOp (..),
     histType,
+    splitHistResults,
     SegBinOp (..),
     segBinOpResults,
     segBinOpChunks,
@@ -135,7 +137,7 @@ data HistOp rep = HistOp
     -- SOACS representation), these are the logical
     -- "dimensions".  This is used to generate more efficient
     -- code.
-    histShape :: Shape,
+    histOpShape :: Shape,
     histOp :: Lambda rep
   }
   deriving (Eq, Ord, Show)
@@ -147,9 +149,20 @@ histType :: HistOp rep -> [Type]
 histType op =
   map
     ( (`arrayOfRow` histWidth op)
-        . (`arrayOfShape` histShape op)
+        . (`arrayOfShape` histOpShape op)
     )
     $ lambdaReturnType $ histOp op
+
+-- | Split reduction results returned by a 'KernelBody' into those
+-- that correspond to indexes for the 'HistOp's, and those that
+-- correspond to value.
+splitHistResults :: [HistOp rep] -> [SubExp] -> [([SubExp], [SubExp])]
+splitHistResults ops res =
+  let ranks = map (shapeRank . histOpShape) ops
+      (idxs, vals) = splitAt (sum ranks) res
+   in zip
+        (chunks ranks idxs)
+        (chunks (map (length . histDest) ops) vals)
 
 -- | An operator for 'SegScan' and 'SegRed'.
 data SegBinOp rep = SegBinOp
@@ -485,6 +498,24 @@ instance Pretty KernelResult where
       onDim (dim, blk_tile, reg_tile) =
         ppr dim <+> "/" <+> parens (ppr blk_tile <+> "*" <+> ppr reg_tile)
 
+-- | These dimensions (indexed from 0, outermost) of the corresponding
+-- 'SegSpace' should not be parallelised, but instead iterated
+-- sequentially.  For example, with a 'SegSeqDims' of @[0]@ and a
+-- 'SegSpace' with dimensions @[n][m]@, there will be an outer loop
+-- with @n@ iterations, while the @m@ dimension will be parallelised.
+--
+-- Semantically, this has no effect, but it may allow reductions in
+-- memory usage or other low-level optimisations.  Operationally, the
+-- guarantee is that for a SegSeqDims of e.g. @[i,j,k]@, threads
+-- running at any given moment will always have the same indexes along
+-- the dimensions specified by @[i,j,k]@.
+--
+-- At the moment, this is only supported for 'SegNoVirtFull'
+-- intra-group parallelism in GPU code, as we have not yet found it
+-- useful anywhere else.
+newtype SegSeqDims = SegSeqDims {segSeqDims :: [Int]}
+  deriving (Eq, Ord, Show)
+
 -- | Do we need group-virtualisation when generating code for the
 -- segmented operation?  In most cases, we do, but for some simple
 -- kernels, we compute the full number of groups in advance, and then
@@ -498,7 +529,7 @@ data SegVirt
   | -- | Not only do we not need virtualisation, but we _guarantee_
     -- that all physical threads participate in the work.  This can
     -- save some checks in code generation.
-    SegNoVirtFull
+    SegNoVirtFull SegSeqDims
   deriving (Eq, Ord, Show)
 
 -- | Index space of a 'SegOp'.
@@ -610,7 +641,7 @@ segOpType (SegScan _ space scans ts kbody) =
       map (`arrayOfShape` shape) (lambdaReturnType $ segBinOpLambda op)
 segOpType (SegHist _ space ops _ _) = do
   op <- ops
-  let shape = Shape (segment_dims <> [histWidth op]) <> histShape op
+  let shape = Shape (segment_dims <> [histWidth op]) <> histOpShape op
   map (`arrayOfShape` shape) (lambdaReturnType $ histOp op)
   where
     dims = segSpaceDims space

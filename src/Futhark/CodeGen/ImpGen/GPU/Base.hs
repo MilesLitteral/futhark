@@ -60,7 +60,7 @@ import Prelude hiding (quot, rem)
 -- of the kernels code is the same, there are some cases where we
 -- generate special code based on the ultimate low-level API we are
 -- targeting.
-data Target = CUDA | OpenCL | Metal
+data Target = Metal
 
 -- | Information about the locks available for accumulators.
 data Locks = Locks
@@ -427,7 +427,7 @@ prepareIntraGroupSegHist group_size =
           locks <- newVName "locks"
 
           let num_locks = toInt64Exp $ unCount group_size
-              dims = map toInt64Exp $ shapeDims (histOpShape op <> histShape op)
+              dims = map toInt64Exp $ shapeDims (histOpShape op <> histOpShape op)
               l' = Locking locks 0 1 0 (pure . (`rem` num_locks) . flattenIndex dims)
               locks_t = Array int32 (Shape [unCount group_size]) NoUniqueness
 

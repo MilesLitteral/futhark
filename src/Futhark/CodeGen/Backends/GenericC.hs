@@ -96,7 +96,7 @@ import Futhark.CodeGen.Backends.GenericC.Options
 import Futhark.CodeGen.Backends.GenericC.Server (serverDefs)
 import Futhark.CodeGen.Backends.SimpleRep
 import Futhark.CodeGen.ImpCode
-import Futhark.CodeGen.RTS.C (errorsH, halfH, lockH, timingH, utilH)
+import Futhark.CodeGen.RTS.C (halfH, lockH, timingH, utilH)
 import Futhark.IR.Prop (isBuiltInFunction)
 import qualified Futhark.Manifest as Manifest
 import Futhark.MonadFreshNames
@@ -1561,7 +1561,6 @@ $entrydecls
 // Miscellaneous
 $miscdecls
 #define FUTHARK_BACKEND_$backend
-$errorsH
 
 #ifdef __cplusplus
 }

@@ -47,6 +47,9 @@ let
           futhark-server =
             haskellPackagesNew.callPackage ./nix/futhark-server.nix { };
 
+          futhark-manifest =
+            haskellPackagesNew.callPackage ./nix/futhark-manifest.nix { };
+
           futhark =
             # callCabal2Nix does not do a great job at determining
             # which files must be included as source, which causes

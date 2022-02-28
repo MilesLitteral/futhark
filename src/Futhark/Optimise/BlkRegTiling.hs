@@ -126,7 +126,7 @@ mmBlkRegTiling (Let pat aux (Op (SegOp (SegMap SegThread {} seg_space ts old_kbo
               map snd rem_outer_dims_rev
       grid_size <- letSubExp "grid_size" =<< toExp grid_pexp
       group_size <- letSubExp "group_size" =<< toExp (pe64 ty * pe64 tx)
-      let segthd_lvl = SegThread (Count grid_size) (Count group_size) SegNoVirtFull
+      let segthd_lvl = SegThread (Count grid_size) (Count group_size) (SegNoVirtFull (SegSeqDims []))
 
       gid_x <- newVName "gid_x"
       gid_y <- newVName "gid_y"
@@ -779,7 +779,7 @@ doRegTiling3D (Let pat aux (Op (SegOp old_kernel)))
       let grid_pexp = product $ gridxyz_pexp : map (pe64 . snd) rem_outer_dims_rev
       grid_size <- letSubExp "grid_size_tile3d" =<< toExp grid_pexp
       group_size <- letSubExp "group_size_tile3d" =<< toExp (pe64 ty * pe64 tx)
-      let segthd_lvl = SegThread (Count grid_size) (Count group_size) SegNoVirtFull
+      let segthd_lvl = SegThread (Count grid_size) (Count group_size) (SegNoVirtFull (SegSeqDims []))
 
       count_shmem <- letSubExp "count_shmem" =<< ceilDiv rz group_size
 

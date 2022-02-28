@@ -13,14 +13,14 @@ import Data.FileEmbed
 import Data.Version
 import Futhark.Util (trim)
 import GitHash
-import qualified Paths_futhark
+import qualified Paths_futhark_metal
 
 {-# NOINLINE version #-}
 
 -- | The version of Futhark that we are using.  This is equivalent to
 -- the version defined in the .cabal file.
 version :: Version
-version = Paths_futhark.version
+version = Paths_futhark_metal.version
 
 {-# NOINLINE versionString #-}
 

@@ -34,7 +34,7 @@ segHistOpChunks :: [HistOp rep] -> [a] -> [[a]]
 segHistOpChunks = chunks . map (length . histNeutral)
 
 histSize :: HistOp MCMem -> Imp.TExp Int64
-histSize = product . map toInt64Exp . shapeDims . histShape
+histSize = product . map toInt64Exp . shapeDims . histOpShape
 
 nonsegmentedHist ::
   Pat MCMem ->
@@ -84,7 +84,7 @@ onOpAtomic op = do
       -- Allocate a static array of locks
       -- as in the GPU backend
       let num_locks = 100151 -- This number is taken from the GPU backend
-          dims = map toInt64Exp $ shapeDims (histOpShape op <> histShape op)
+          dims = map toInt64Exp $ shapeDims (histOpShape op <> histOpShape op)
       locks <-
         sStaticArray "hist_locks" DefaultSpace int32 $
           Imp.ArrayZeros num_locks
@@ -203,7 +203,7 @@ subHistogram pat flat_idx space histops num_histos kbody = do
         sIf
           (tid' .==. 0)
           (copyDWIMFix hist [] (Var $ patElemName pe) [])
-          ( sLoopNest (histShape histop) $ \shape_is ->
+          ( sLoopNest (histOpShape histop) $ \shape_is ->
               sLoopNest (histOpShape histop) $ \vec_is ->
                 copyDWIMFix hist (shape_is <> vec_is) ne []
           )
@@ -254,13 +254,13 @@ subHistogram pat flat_idx space histops num_histos kbody = do
   -- Perform a segmented reduction over the subhistograms
   forM_ (zip3 per_red_pes global_subhistograms histops) $ \(red_pes, hists, op) -> do
     bucket_ids <-
-      replicateM (shapeRank (histShape op)) (newVName "bucket_id")
+      replicateM (shapeRank (histOpShape op)) (newVName "bucket_id")
     subhistogram_id <- newVName "subhistogram_id"
 
     let segred_space =
           SegSpace (segFlat space) $
             segment_dims
-              ++ zip bucket_ids (shapeDims (histShape op))
+              ++ zip bucket_ids (shapeDims (histOpShape op))
               ++ [(subhistogram_id, tvSize num_histos)]
 
         segred_op = SegBinOp Noncommutative (histOp op) (histNeutral op) (histOpShape op)

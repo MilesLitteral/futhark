@@ -8,10 +8,10 @@
 -- are targeting OpenCL or CUDA.  The important distinctions (the host
 -- level code) are introduced later.
 module Futhark.CodeGen.ImpGen.GPU
-  ( compileProgOpenCL,
-    compileProgCUDA,
+  ( --compileProgOpenCL,
+    --compileProgCUDA,
     compileProgMetal
-    Warnings,
+    --Warnings,
   )
 where
 
