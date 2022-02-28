@@ -9,43 +9,49 @@ module Futhark.CodeGen.ImpCode.Multicore
     Multicore (..),
     Scheduling (..),
     SchedulerInfo (..),
+    MCCode(..),
     AtomicOp (..),
     ParallelTask (..),
     module Futhark.CodeGen.ImpCode,
   )
 where
 
-import Futhark.CodeGen.ImpCode hiding (Code, Function)
-import qualified Futhark.CodeGen.ImpCode as Imp
+import Futhark.CodeGen.ImpCode 
 import Futhark.Util.Pretty
 
 -- | An imperative program.
-type Program = Imp.Functions Multicore
-
--- | An imperative function.
-type Function = Imp.Function Multicore
-
--- | A piece of imperative code, with multicore operations inside.
-type Code = Imp.Code Multicore
+type Program = Functions Multicore
 
 -- | A multicore operation.
 data Multicore
   = SegOp String [Param] ParallelTask (Maybe ParallelTask) [Param] SchedulerInfo
-  | ParLoop String VName Code Code Code [Param] VName
+  | ParLoop String (Code Multicore) [Param]
+  | -- | Retrieve inclusive start and exclusive end indexes of the
+    -- chunk we are supposed to be executing.  Only valid immediately
+    -- inside a 'ParLoop' construct!
+    GetLoopBounds VName VName
+  | -- | Retrieve the task ID that is currently executing.  Only valid
+    -- immediately inside a 'ParLoop' construct!
+    GetTaskId VName
+  | -- | Retrieve the number of subtasks to execute.  Only valid
+    -- immediately inside a 'SegOp' or 'ParLoop' construct!
+    GetNumTasks VName
   | Atomic AtomicOp
-
 -- | Atomic operations return the value stored before the update.
 -- This old value is stored in the first 'VName'.  The second 'VName'
 -- is the memory block to update.  The 'Exp' is the new value.
 data AtomicOp
-  = AtomicAdd IntType VName VName (Count Elements (Imp.TExp Int32)) Exp
-  | AtomicSub IntType VName VName (Count Elements (Imp.TExp Int32)) Exp
-  | AtomicAnd IntType VName VName (Count Elements (Imp.TExp Int32)) Exp
-  | AtomicOr IntType VName VName (Count Elements (Imp.TExp Int32)) Exp
-  | AtomicXor IntType VName VName (Count Elements (Imp.TExp Int32)) Exp
-  | AtomicXchg PrimType VName VName (Count Elements (Imp.TExp Int32)) Exp
-  | AtomicCmpXchg PrimType VName VName (Count Elements (Imp.TExp Int32)) VName Exp
+  = AtomicAdd IntType VName VName (Count Elements (TExp Int32)) Exp
+  | AtomicSub IntType VName VName (Count Elements (TExp Int32)) Exp
+  | AtomicAnd IntType VName VName (Count Elements (TExp Int32)) Exp
+  | AtomicOr IntType VName VName (Count Elements (TExp Int32)) Exp
+  | AtomicXor IntType VName VName (Count Elements (TExp Int32)) Exp
+  | AtomicXchg PrimType VName VName (Count Elements (TExp Int32)) Exp
+  | AtomicCmpXchg PrimType VName VName (Count Elements (TExp Int32)) VName Exp
   deriving (Show)
+
+-- | Multicore code.
+type MCCode = Code Multicore
 
 instance FreeIn AtomicOp where
   freeIn' (AtomicAdd _ _ arr i x) = freeIn' arr <> freeIn' i <> freeIn' x
@@ -56,16 +62,18 @@ instance FreeIn AtomicOp where
   freeIn' (AtomicCmpXchg _ _ arr i retval x) = freeIn' arr <> freeIn' i <> freeIn' x <> freeIn' retval
   freeIn' (AtomicXchg _ _ arr i x) = freeIn' arr <> freeIn' i <> freeIn' x
 
+-- | Information about parallel work that is do be done.  This is
+-- passed to the scheduler to help it make scheduling decisions.
 data SchedulerInfo = SchedulerInfo
-  { nsubtasks :: VName, -- The variable that describes how many subtasks the scheduler created
-    iterations :: Imp.Exp, -- The number of total iterations for a task
-    scheduling :: Scheduling -- The type scheduling for the task
+  { -- | The number of total iterations for a task.
+    iterations :: Exp,
+    -- | The type scheduling for the task.
+    scheduling :: Scheduling
   }
 
-data ParallelTask = ParallelTask
-  { task_code :: Code,
-    flatTid :: VName -- The variable for the thread id execution the code
-  }
+
+newtype ParallelTask = ParallelTask (Code Multicore)
+
 
 -- | Whether the Scheduler should schedule the tasks as Dynamic
 -- or it is restainted to Static
@@ -78,16 +86,14 @@ instance Pretty Scheduling where
   ppr Static = "Static"
 
 instance Pretty SchedulerInfo where
-  ppr (SchedulerInfo nsubtask i sched) =
+  ppr (SchedulerInfo i sched) =
     stack
-      [ nestedBlock "number of subtasks {" "}" (ppr nsubtask),
-        nestedBlock "scheduling {" "}" (ppr sched),
+      [ nestedBlock "scheduling {" "}" (ppr sched),
         nestedBlock "iter {" "}" (ppr i)
       ]
 
 instance Pretty ParallelTask where
-  ppr (ParallelTask code tid) =
-    "\\" <> ppr tid <+> "->" </> ppr code
+  ppr (ParallelTask code) = ppr code
 
 instance Pretty Multicore where
   ppr (SegOp s free seq_code par_code retval scheduler) =
@@ -101,30 +107,31 @@ instance Pretty Multicore where
             maybe mempty (nestedBlock "par {" "}" . ppr) par_code,
             nestedBlock "retvals {" "}" (ppr retval)
           ]
-  ppr (ParLoop s i prebody body postbody params info) =
-    "parloop" <+> ppr s <+> ppr i <+> nestedBlock "{" "}" ppbody
+  ppr (ParLoop s body params) =
+    "parloop" <+> ppr s </> nestedBlock "{" "}" ppbody
     where
       ppbody =
         stack
-          [ nestedBlock "prebody {" "}" (ppr prebody),
-            nestedBlock "params {" "}" (ppr params),
-            ppr info,
-            nestedBlock "body {" "}" (ppr body),
-            nestedBlock "postbody {" "}" (ppr postbody)
+          [ nestedBlock "params {" "}" (ppr params),
+            nestedBlock "body {" "}" (ppr body)
           ]
   ppr (Atomic _) = "AtomicOp"
 
 instance FreeIn SchedulerInfo where
-  freeIn' (SchedulerInfo nsubtask iter _) =
-    freeIn' iter <> freeIn' nsubtask
+  freeIn' (SchedulerInfo iter _) = freeIn' iter
 
 instance FreeIn ParallelTask where
-  freeIn' (ParallelTask code i) =
-    fvBind (oneName i) $ freeIn' code
+  freeIn' (ParallelTask code) = freeIn' code
 
 instance FreeIn Multicore where
+  freeIn' (GetLoopBounds start end) =
+    freeIn' (start, end)
+  freeIn' (GetTaskId v) =
+    freeIn' v
+  freeIn' (GetNumTasks v) =
+    freeIn' v
   freeIn' (SegOp _ _ par_code seq_code _ info) =
     freeIn' par_code <> freeIn' seq_code <> freeIn' info
-  freeIn' (ParLoop _ _ prebody body postbody _ _) =
-    freeIn' prebody <> fvBind (Imp.declaredIn prebody) (freeIn' $ body <> postbody)
+  freeIn' (ParLoop _ body _) =
+    freeIn' body
   freeIn' (Atomic aop) = freeIn' aop

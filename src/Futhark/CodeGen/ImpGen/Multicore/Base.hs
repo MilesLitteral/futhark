@@ -17,7 +17,9 @@ module Futhark.CodeGen.ImpGen.Multicore.Base
     getSpace,
     getIterationDomain,
     getReturnParams,
+    getLoopBounds,
     segOpString,
+    generateChunkLoop
   )
 where
 
@@ -29,6 +31,7 @@ import qualified Futhark.CodeGen.ImpCode.Multicore as Imp
 import Futhark.CodeGen.ImpGen
 import Futhark.Error
 import Futhark.IR.MCMem
+import Futhark.MonadFreshNames
 import Futhark.Transform.Rename
 import Prelude hiding (quot, rem)
 
@@ -75,6 +78,13 @@ getSpace (SegHist _ space _ _ _) = space
 getSpace (SegRed _ space _ _ _) = space
 getSpace (SegScan _ space _ _ _) = space
 getSpace (SegMap _ space _ _) = space
+
+getLoopBounds :: MulticoreGen (Imp.TExp Int64, Imp.TExp Int64)
+getLoopBounds = do
+  start <- dPrim "start" int64
+  end <- dPrim "end" int64
+  emit $ Imp.Op $ Imp.GetLoopBounds (tvVar start) (tvVar end)
+  pure (tvExp start, tvExp end)
 
 getIterationDomain :: SegOp () MCMem -> SegSpace -> MulticoreGen (Imp.TExp Int64)
 getIterationDomain SegMap {} space = do
@@ -132,11 +142,11 @@ freeVariables :: FreeIn a => a -> [VName] -> [VName]
 freeVariables code names =
   namesToList $ freeIn code `namesSubtract` namesFromList names
 
-freeParams :: FreeIn a => a -> [VName] -> MulticoreGen [Imp.Param]
-freeParams code names = do
-  let freeVars = freeVariables code names
-  ts <- mapM lookupType freeVars
-  concat <$> zipWithM toParam freeVars ts
+freeParams :: FreeIn a => a -> MulticoreGen [Imp.Param]
+freeParams code = do
+  let free = namesToList $ freeIn code
+  ts <- mapM lookupType free
+  concat <$> zipWithM toParam free ts
 
 -- | Arrays for storing group results shared between threads
 groupResultArrays ::
@@ -150,19 +160,19 @@ groupResultArrays s num_threads reds =
       let full_shape = Shape [num_threads] <> shape <> arrayShape t
       sAllocArray s (elemType t) full_shape DefaultSpace
 
-isLoadBalanced :: Imp.Code -> Bool
+isLoadBalanced :: Imp.MCCode -> Bool
 isLoadBalanced (a Imp.:>>: b) = isLoadBalanced a && isLoadBalanced b
 isLoadBalanced (Imp.For _ _ a) = isLoadBalanced a
 isLoadBalanced (Imp.If _ a b) = isLoadBalanced a && isLoadBalanced b
 isLoadBalanced (Imp.Comment _ a) = isLoadBalanced a
 isLoadBalanced Imp.While {} = False
-isLoadBalanced (Imp.Op (Imp.ParLoop _ _ _ code _ _ _)) = isLoadBalanced code
+isLoadBalanced (Imp.Op (Imp.ParLoop _ code _)) = isLoadBalanced code
 isLoadBalanced _ = True
 
 segBinOpComm' :: [SegBinOp rep] -> Commutativity
 segBinOpComm' = mconcat . map segBinOpComm
 
-decideScheduling' :: SegOp () rep -> Imp.Code -> Imp.Scheduling
+decideScheduling' :: SegOp () rep -> Imp.MCCode -> Imp.Scheduling
 decideScheduling' SegHist {} _ = Imp.Static
 decideScheduling' SegScan {} _ = Imp.Static
 decideScheduling' (SegRed _ _ reds _ _) code =
@@ -171,7 +181,7 @@ decideScheduling' (SegRed _ _ reds _ _) code =
     Noncommutative -> Imp.Static
 decideScheduling' SegMap {} code = decideScheduling code
 
-decideScheduling :: Imp.Code -> Imp.Scheduling
+decideScheduling :: Imp.MCCode -> Imp.Scheduling
 decideScheduling code =
   if isLoadBalanced code
     then Imp.Static
@@ -180,7 +190,7 @@ decideScheduling code =
 -- | Try to extract invariant allocations.  If we assume that the
 -- given 'Imp.Code' is the body of a 'SegOp', then it is always safe
 -- to move the immediate allocations to the prebody.
-extractAllocations :: Imp.Code -> (Imp.Code, Imp.Code)
+extractAllocations :: Imp.MCCode -> (Imp.MCCode, Imp.MCCode)
 extractAllocations segop_code = f segop_code
   where
     declared = Imp.declaredIn segop_code
@@ -203,7 +213,7 @@ extractAllocations segop_code = f segop_code
       let (ta, tcode') = f tcode
           (fa, fcode') = f fcode
        in (ta <> fa, Imp.If cond tcode' fcode')
-    f (Imp.Op (Imp.ParLoop s i prebody body postbody free info)) =
+    f (Imp.Op (Imp.ParLoop s body free)) =
       let (body_allocs, body') = extractAllocations body
           (free_allocs, here_allocs) = f body_allocs
           free' =
@@ -214,11 +224,31 @@ extractAllocations segop_code = f segop_code
               )
               free
        in ( free_allocs,
-            here_allocs
-              <> Imp.Op (Imp.ParLoop s i prebody body' postbody free' info)
+            here_allocs <> Imp.Op (Imp.ParLoop s body' free')
           )
     f code =
       (mempty, code)
+
+-- | Emit code for the chunk loop, given an action that generates code
+-- for a single iteration.
+--
+-- The action is called with the (symbolic) index of the current
+-- iteration.
+generateChunkLoop ::
+  String ->
+  (Imp.TExp Int64 -> MulticoreGen ()) ->
+  MulticoreGen ()
+generateChunkLoop desc m = do
+  emit $ Imp.DebugPrint (desc <> " " <> "fbody") Nothing
+  (start, end) <- getLoopBounds
+  n <- dPrimVE "n" $ end - start
+  i <- newVName (desc <> "_i")
+  (body_allocs, body) <- fmap extractAllocations $
+    collect $ do
+      addLoopVar i Int64
+      m $ start + Imp.le64 i
+  emit body_allocs
+  emit $ Imp.For i (untyped n) body
 
 -------------------------------
 ------- SegHist helpers -------
