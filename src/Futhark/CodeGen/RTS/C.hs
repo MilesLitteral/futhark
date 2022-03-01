@@ -9,6 +9,7 @@ module Futhark.CodeGen.RTS.C
     halfH,
     lockH,
     openclH,
+    metalH,
     scalarF16H,
     scalarH,
     schedulerH,
@@ -41,6 +42,11 @@ chaselevH = $(embedStringFile "rts/c/chaselev.h")
 cudaH :: T.Text
 cudaH = $(embedStringFile "rts/c/cuda.h")
 {-# NOINLINE cudaH #-}
+
+-- | @rts/c/cuda.h@
+metalH :: T.Text
+metalH = $(embedStringFile "rts/c/mtlpp.hpp")
+{-# NOINLINE metalH #-}
 
 -- | @rts/c/free_list.h@
 freeListH :: T.Text

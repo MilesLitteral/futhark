@@ -37,11 +37,9 @@ import qualified Futhark.Analysis.Interference as Interference
 import qualified Futhark.Analysis.LastUse as LastUse
 import qualified Futhark.Analysis.MemAlias as MemAlias
 import Futhark.Analysis.Metrics
-import qualified Futhark.CodeGen.Backends.CCUDA as CCUDA
-import qualified Futhark.CodeGen.Backends.COpenCL as COpenCL
+import qualified Futhark.CodeGen.Backends.Metal as Metal
 import qualified Futhark.CodeGen.Backends.MulticoreC as MulticoreC
 import qualified Futhark.CodeGen.Backends.MulticoreWASM as MulticoreWASM
-import qualified Futhark.CodeGen.Backends.PyOpenCL as PyOpenCL
 import qualified Futhark.CodeGen.Backends.SequentialC as SequentialC
 import qualified Futhark.CodeGen.Backends.SequentialPython as SequentialPy
 import qualified Futhark.CodeGen.Backends.SequentialWASM as SequentialWASM
@@ -228,16 +226,17 @@ compileCAction fcfg mode outpath =
           runCC cpath outpath ["-O3", "-std=c99"] ["-lm"]
 
 -- | The @futhark opencl@ action.
-compileOpenCLAction :: FutharkConfig -> CompilerMode -> FilePath -> Action GPUMem
+-- This is the Big Fish
+compileMetalAction :: FutharkConfig -> CompilerMode -> FilePath -> Action GPUMem
 compileOpenCLAction fcfg mode outpath =
   Action
-    { actionName = "Compile to OpenCL",
-      actionDescription = "Compile to OpenCL",
+    { actionName = "Compile to Metal",
+      actionDescription = "Compile to Metal",
       actionProcedure = helper
     }
   where
     helper prog = do
-      cprog <- handleWarnings fcfg $ COpenCL.compileProg (T.pack versionString) prog
+      cprog <- handleWarnings fcfg $ Metal.compileProg (T.pack versionString) prog
       let cpath = outpath `addExtension` "c"
           hpath = outpath `addExtension` "h"
           jsonpath = outpath `addExtension` "json"
@@ -251,47 +250,15 @@ compileOpenCLAction fcfg mode outpath =
 
       case mode of
         ToLibrary -> do
-          let (header, impl, manifest) = COpenCL.asLibrary cprog
+          let (header, impl, manifest) = Metal.asLibrary cprog
           liftIO $ T.writeFile hpath $ cPrependHeader header
           liftIO $ T.writeFile cpath $ cPrependHeader impl
           liftIO $ T.writeFile jsonpath manifest
         ToExecutable -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ COpenCL.asExecutable cprog
+          liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asExecutable cprog
           runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
         ToServer -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ COpenCL.asServer cprog
-          runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
-
--- | The @futhark cuda@ action.
-compileCUDAAction :: FutharkConfig -> CompilerMode -> FilePath -> Action GPUMem
-compileCUDAAction fcfg mode outpath =
-  Action
-    { actionName = "Compile to CUDA",
-      actionDescription = "Compile to CUDA",
-      actionProcedure = helper
-    }
-  where
-    helper prog = do
-      cprog <- handleWarnings fcfg $ CCUDA.compileProg (T.pack versionString) prog
-      let cpath = outpath `addExtension` "c"
-          hpath = outpath `addExtension` "h"
-          jsonpath = outpath `addExtension` "json"
-          extra_options =
-            [ "-lcuda",
-              "-lcudart",
-              "-lnvrtc"
-            ]
-      case mode of
-        ToLibrary -> do
-          let (header, impl, manifest) = CCUDA.asLibrary cprog
-          liftIO $ T.writeFile hpath $ cPrependHeader header
-          liftIO $ T.writeFile cpath $ cPrependHeader impl
-          liftIO $ T.writeFile jsonpath manifest
-        ToExecutable -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ CCUDA.asExecutable cprog
-          runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
-        ToServer -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ CCUDA.asServer cprog
+          liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asServer cprog
           runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
 
 -- | The @futhark multicore@ action.
@@ -351,15 +318,6 @@ compilePythonAction fcfg mode outpath =
     { actionName = "Compile to PyOpenCL",
       actionDescription = "Compile to Python with OpenCL",
       actionProcedure = pythonCommon SequentialPy.compileProg fcfg mode outpath
-    }
-
--- | The @futhark pyopencl@ action.
-compilePyOpenCLAction :: FutharkConfig -> CompilerMode -> FilePath -> Action GPUMem
-compilePyOpenCLAction fcfg mode outpath =
-  Action
-    { actionName = "Compile to PyOpenCL",
-      actionDescription = "Compile to Python with OpenCL",
-      actionProcedure = pythonCommon PyOpenCL.compileProg fcfg mode outpath
     }
 
 cmdEMCFLAGS :: [String] -> [String]

@@ -31,7 +31,7 @@ import Futhark.CodeGen.Metal.Heuristics
 import Futhark.CodeGen.RTS.C (metalH)
 import Futhark.Util (chunk, zEncodeString)
 import Futhark.Util.Pretty (prettyOneLine)
-import qualified Language.C.Quote.Metal as C
+import qualified Language.C.Quote.OpenCL as C
 import qualified Language.C.Syntax as C
 
 errorMsgNumArgs :: ErrorMsg a -> Int

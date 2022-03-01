@@ -8,7 +8,8 @@
 -- are targeting OpenCL or CUDA.  The important distinctions (the host
 -- level code) are introduced later.
 module Futhark.CodeGen.ImpGen.GPU
-  ( compileProgOpenCL,
+  ( compileProgMetal,
+    compileProgOpenCL,
     compileProgCUDA,
     Warnings,
   )
@@ -47,8 +48,8 @@ callKernelOperations =
       opsAllocCompilers = mempty
     }
 
-openclAtomics, cudaAtomics :: AtomicBinOp
-(openclAtomics, cudaAtomics) = (flip lookup opencl, flip lookup cuda)
+openclAtomics, cudaAtomics, metalAtomics :: AtomicBinOp
+(openclAtomics, cudaAtomics, metalAtomics) = (flip lookup opencl, flip lookup cuda, flip lookup metal)
   where
     opencl64 =
       [ (Add Int64 OverflowUndef, Imp.AtomicAdd Int64),
@@ -76,6 +77,7 @@ openclAtomics, cudaAtomics :: AtomicBinOp
         ++ [ (FAdd Float32, Imp.AtomicFAdd Float32),
              (FAdd Float64, Imp.AtomicFAdd Float64)
            ]
+    metal = cuda 
 
 compileProg ::
   MonadFreshNames m =>
@@ -104,6 +106,10 @@ compileProgOpenCL,
     MonadFreshNames m => Prog GPUMem -> m (Warnings, Imp.Program)
 compileProgOpenCL = compileProg $ HostEnv openclAtomics OpenCL mempty
 compileProgCUDA = compileProg $ HostEnv cudaAtomics CUDA mempty
+
+
+compileProgMetal :: MonadFreshNames m => Prog GPUMem -> m (Warnings, Imp.Program)
+compileProgMetal = compileProg $ HostEnv metalAtomics Metal mempty
 
 opCompiler ::
   Pat LetDecMem ->

@@ -28,7 +28,7 @@ import Futhark.IR.GPUMem hiding
     GetSizeMax,
   )
 import Futhark.MonadFreshNames
-import qualified Language.C.Quote.Metal as C
+import qualified Language.C.Quote.OpenCL as C
 import qualified Language.C.Syntax as C
 import NeatInterpolation (untrimming)
 
