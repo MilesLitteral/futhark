@@ -16,12 +16,10 @@ module Futhark.Actions
     metricsAction,
     compileCAction,
     compileCtoWASMAction,
-    compileOpenCLAction,
-    compileCUDAAction,
+    compileMetalAction,
     compileMulticoreAction,
     compileMulticoreToWASMAction,
     compilePythonAction,
-    compilePyOpenCLAction,
   )
 where
 
@@ -228,7 +226,7 @@ compileCAction fcfg mode outpath =
 -- | The @futhark opencl@ action.
 -- This is the Big Fish
 compileMetalAction :: FutharkConfig -> CompilerMode -> FilePath -> Action GPUMem
-compileOpenCLAction fcfg mode outpath =
+compileMetalAction fcfg mode outpath =
   Action
     { actionName = "Compile to Metal",
       actionDescription = "Compile to Metal",
