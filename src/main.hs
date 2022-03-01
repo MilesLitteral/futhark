@@ -12,7 +12,7 @@ import qualified Data.Text.IO as T
 import qualified Futhark.CLI.Autotune as Autotune
 import qualified Futhark.CLI.Bench as Bench
 import qualified Futhark.CLI.C as C
-import qualified Futhark.CLI.CUDA as CCUDA
+import qualified Futhark.CLI.Metal as Metal
 import qualified Futhark.CLI.Check as Check
 import qualified Futhark.CLI.Datacmp as Datacmp
 import qualified Futhark.CLI.Dataset as Dataset
@@ -23,9 +23,7 @@ import qualified Futhark.CLI.Literate as Literate
 import qualified Futhark.CLI.Misc as Misc
 import qualified Futhark.CLI.Multicore as Multicore
 import qualified Futhark.CLI.MulticoreWASM as MulticoreWASM
-import qualified Futhark.CLI.OpenCL as OpenCL
 import qualified Futhark.CLI.Pkg as Pkg
-import qualified Futhark.CLI.PyOpenCL as PyOpenCL
 import qualified Futhark.CLI.Python as Python
 import qualified Futhark.CLI.Query as Query
 import qualified Futhark.CLI.REPL as REPL
@@ -52,11 +50,9 @@ commands =
       ("repl", (REPL.main, "Run interactive Read-Eval-Print-Loop.")),
       ("run", (Run.main, "Run a program through the (slow!) interpreter.")),
       ("c", (C.main, "Compile to sequential C.")),
-      ("opencl", (OpenCL.main, "Compile to C calling OpenCL.")),
-      ("cuda", (CCUDA.main, "Compile to C calling CUDA.")),
+      ("metal", (Metal.main, "Compile to C++ calling Metal.")),
       ("multicore", (Multicore.main, "Compile to multicore C.")),
       ("python", (Python.main, "Compile to sequential Python.")),
-      ("pyopencl", (PyOpenCL.main, "Compile to Python calling PyOpenCL.")),
       ("wasm", (WASM.main, "Compile to WASM with sequential C")),
       ("wasm-multicore", (MulticoreWASM.main, "Compile to WASM with multicore C")),
       ("test", (Test.main, "Test Futhark programs.")),
