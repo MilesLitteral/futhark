@@ -5,14 +5,15 @@
 {-# LANGUAGE Strict #-}
 
 -- | The Futhark source language AST definition.  Many types, such as
--- 'ExpBase'@, are parametrised by type and name representation.
+-- 'ExpBase', are parametrised by type and name representation.
 -- E.g. in a value of type @ExpBase f vn@, annotations are wrapped in
--- the functor @f@, and all names are of type @vn@.  See the
--- @https://futhark.readthedocs.org@ for a language reference, or this
+-- the functor @f@, and all names are of type @vn@.  See
+-- https://futhark.readthedocs.org for a language reference, or this
 -- module may be a little hard to understand.
 module Language.Futhark.Syntax
   ( module Language.Futhark.Core,
     pretty,
+    prettyText,
 
     -- * Types
     Uniqueness (..),
@@ -237,7 +238,7 @@ instance IsPrimValue Double where
 instance IsPrimValue Bool where
   primValue = BoolValue
 
--- | The value of an 'AttrAtom'.
+-- | The value of an v'AttrAtom'.
 data AttrAtom vn
   = AtomName Name
   | AtomInt Integer
@@ -565,6 +566,8 @@ instance Located (TypeDeclBase f vn) where
 data Diet
   = -- | Consumes these fields in the record.
     RecordDiet (M.Map Name Diet)
+  | -- | Consume these parts of the constructors.
+    SumDiet (M.Map Name [Diet])
   | -- | A function that consumes its argument(s) like this.
     -- The final 'Diet' should always be 'Observe', as there
     -- is no way for a function to consume its return value.

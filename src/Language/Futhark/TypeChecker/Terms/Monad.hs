@@ -17,7 +17,7 @@ module Language.Futhark.TypeChecker.Terms.Monad
     liftTypeM,
     ValBinding (..),
     Locality (..),
-    SizeSource (..),
+    SizeSource (SourceBound, SourceSlice),
     NameReason (..),
     InferredType (..),
     Checking (..),
@@ -248,19 +248,16 @@ badLetWithValue arre vale loc =
       </> indent 2 (ppr vale)
       </> "Hint: use" <+> pquote "copy" <+> "to remove aliases from the value."
 
-returnAliased :: Name -> Name -> SrcLoc -> TermTypeM ()
-returnAliased fname name loc =
+returnAliased :: Name -> SrcLoc -> TermTypeM ()
+returnAliased name loc =
   typeError loc mempty . withIndexLink "return-aliased" $
-    "Unique-typed return value of" <+> pquote (pprName fname)
-      <+> "is aliased to"
+    "Unique-typed return value is aliased to"
       <+> pquote (pprName name) <> ", which is not consumable."
 
-uniqueReturnAliased :: Name -> SrcLoc -> TermTypeM a
-uniqueReturnAliased fname loc =
+uniqueReturnAliased :: SrcLoc -> TermTypeM a
+uniqueReturnAliased loc =
   typeError loc mempty . withIndexLink "unique-return-aliased" $
-    "A unique-typed component of the return value of"
-      <+> pquote (pprName fname)
-      <+> "is aliased to some other component."
+    "A unique-typed component of the return value is aliased to some other component."
 
 unexpectedType :: MonadTypeChecker m => SrcLoc -> StructType -> [StructType] -> m a
 unexpectedType loc _ [] =
@@ -359,7 +356,7 @@ instance Pretty Checking where
     where
       expected' = commasep (map ppr expected)
   ppr (CheckingBranches t1 t2) =
-    "Conditional branches differ in type."
+    "Branches differ in type."
       </> "Former:" <+> ppr t1
       </> "Latter:" <+> ppr t2
 
@@ -402,7 +399,7 @@ envToTermScope env =
 withEnv :: TermEnv -> Env -> TermEnv
 withEnv tenv env = tenv {termScope = termScope tenv <> envToTermScope env}
 
--- Wrap a function name to give it a vacuous Eq instance for SizeSource.
+-- | Wrap a function name to give it a vacuous Eq instance for SizeSource.
 newtype FName = FName (Maybe (QualName VName))
   deriving (Show)
 
@@ -503,10 +500,10 @@ instance MonadUnify TermTypeM where
     case checking of
       Just checking' ->
         throwError $
-          TypeError (srclocOf loc) notes $
+          TypeError (locOf loc) notes $
             ppr checking' <> line </> doc <> ppr bcs
       Nothing ->
-        throwError $ TypeError (srclocOf loc) notes $ doc <> ppr bcs
+        throwError $ TypeError (locOf loc) notes $ doc <> ppr bcs
 
   matchError loc notes bcs t1 t2 = do
     checking <- asks termChecking
@@ -514,14 +511,14 @@ instance MonadUnify TermTypeM where
       Just checking'
         | hasNoBreadCrumbs bcs ->
           throwError $
-            TypeError (srclocOf loc) notes $
+            TypeError (locOf loc) notes $
               ppr checking'
         | otherwise ->
           throwError $
-            TypeError (srclocOf loc) notes $
+            TypeError (locOf loc) notes $
               ppr checking' <> line </> doc <> ppr bcs
       Nothing ->
-        throwError $ TypeError (srclocOf loc) notes $ doc <> ppr bcs
+        throwError $ TypeError (locOf loc) notes $ doc <> ppr bcs
     where
       doc =
         "Types"
@@ -689,9 +686,9 @@ instance MonadTypeChecker TermTypeM where
     checking <- asks termChecking
     case checking of
       Just checking' ->
-        throwError $ TypeError (srclocOf loc) notes (ppr checking' <> line </> s)
+        throwError $ TypeError (locOf loc) notes (ppr checking' <> line </> s)
       Nothing ->
-        throwError $ TypeError (srclocOf loc) notes s
+        throwError $ TypeError (locOf loc) notes s
 
 onFailure :: Checking -> TermTypeM a -> TermTypeM a
 onFailure c = local $ \env -> env {termChecking = Just c}

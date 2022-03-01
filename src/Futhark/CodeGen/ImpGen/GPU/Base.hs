@@ -60,7 +60,7 @@ import Prelude hiding (quot, rem)
 -- of the kernels code is the same, there are some cases where we
 -- generate special code based on the ultimate low-level API we are
 -- targeting.
-data Target = CUDA | OpenCL | Metal
+data Target = CUDA | OpenCL
 
 -- | Information about the locks available for accumulators.
 data Locks = Locks
@@ -107,7 +107,7 @@ data KernelConstants = KernelConstants
 -- | The sizes of nested iteration spaces in the kernel.
 type SegOpSizes = S.Set [SubExp]
 
--- | Find the sizes of nested parallelism in a 'SegOp' body.
+-- | Find the sizes of nested parallelism in a t'SegOp' body.
 segOpSizes :: Stms GPUMem -> SegOpSizes
 segOpSizes = onStms
   where
@@ -172,7 +172,7 @@ allocLocal mem size =
   sOp $ Imp.LocalAlloc mem size
 
 kernelAlloc ::
-  Pat GPUMem ->
+  Pat LetDecMem ->
   SubExp ->
   Space ->
   InKernelGen ()
@@ -189,7 +189,7 @@ kernelAlloc dest _ _ =
 
 splitSpace ::
   (ToExp w, ToExp i, ToExp elems_per_thread) =>
-  Pat GPUMem ->
+  Pat LetDecMem ->
   SplitOrdering ->
   w ->
   i ->
@@ -246,8 +246,8 @@ compileThreadExp dest e =
 
 -- | Assign iterations of a for-loop to all threads in the kernel.
 -- The passed-in function is invoked with the (symbolic) iteration.
--- 'threadOperations' will be in effect in the body.  For
--- multidimensional loops, use 'groupCoverSpace'.
+-- The body must contain thread-level code.  For multidimensional
+-- loops, use 'groupCoverSpace'.
 kernelLoop ::
   IntExp t =>
   Imp.TExp t ->
@@ -506,7 +506,7 @@ flattenArray k flat arr = do
 --
 -- 2. Executes the body of @lam@.
 --
--- 3. Binds the 'SubExp's that are the 'Result' of @lam@ to the
+-- 3. Binds the t'SubExp's that are the 'Result' of @lam@ to the
 -- provided @dest@s, again interpreted as the destination for a
 -- 'copyDWIM'.
 applyLambda ::
@@ -1583,9 +1583,9 @@ virtualiseGroups SegVirt required_groups m = do
   constants <- kernelConstants <$> askEnv
   phys_group_id <- dPrim "phys_group_id" int32
   sOp $ Imp.GetGroupId (tvVar phys_group_id) 0
-  let iterations =
-        (required_groups - tvExp phys_group_id)
-          `divUp` sExt32 (kernelNumGroups constants)
+  iterations <-
+    dPrimVE "iterations" $
+      (required_groups - tvExp phys_group_id) `divUp` sExt32 (kernelNumGroups constants)
 
   sFor "i" iterations $ \i -> do
     m . tvExp
@@ -1942,7 +1942,7 @@ sCopy pt destloc@(MemLoc destmem _ _) srcloc@(MemLoc srcmem srcdims _) = do
 
 compileGroupResult ::
   SegSpace ->
-  PatElem GPUMem ->
+  PatElem LetDecMem ->
   KernelResult ->
   InKernelGen ()
 compileGroupResult _ pe (TileReturns _ [(w, per_group_elems)] what) = do
@@ -2035,7 +2035,7 @@ compileGroupResult _ _ ConcatReturns {} =
 
 compileThreadResult ::
   SegSpace ->
-  PatElem GPUMem ->
+  PatElem LetDecMem ->
   KernelResult ->
   InKernelGen ()
 compileThreadResult _ _ RegTileReturns {} =

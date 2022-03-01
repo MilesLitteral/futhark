@@ -6,6 +6,9 @@
 module Futhark.Actions
   ( printAction,
     printAliasesAction,
+    printLastUseGPU,
+    printInterferenceGPU,
+    printMemAliasGPU,
     callGraphAction,
     impCodeGenAction,
     kernelImpCodeGenAction,
@@ -15,7 +18,6 @@ module Futhark.Actions
     compileCtoWASMAction,
     compileOpenCLAction,
     compileCUDAAction,
-    compileMetalAction,
     compileMulticoreAction,
     compileMulticoreToWASMAction,
     compilePythonAction,
@@ -31,6 +33,9 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Futhark.Analysis.Alias
 import Futhark.Analysis.CallGraph (buildCallGraph)
+import qualified Futhark.Analysis.Interference as Interference
+import qualified Futhark.Analysis.LastUse as LastUse
+import qualified Futhark.Analysis.MemAlias as MemAlias
 import Futhark.Analysis.Metrics
 import qualified Futhark.CodeGen.Backends.CCUDA as CCUDA
 import qualified Futhark.CodeGen.Backends.COpenCL as COpenCL
@@ -73,6 +78,33 @@ printAliasesAction =
     { actionName = "Prettyprint",
       actionDescription = "Prettyprint the resulting internal representation on standard output.",
       actionProcedure = liftIO . putStrLn . pretty . aliasAnalysis
+    }
+
+-- | Print last use information to stdout.
+printLastUseGPU :: Action GPUMem
+printLastUseGPU =
+  Action
+    { actionName = "print last use gpu",
+      actionDescription = "Print last use information on gpu.",
+      actionProcedure = liftIO . putStrLn . pretty . LastUse.analyseGPUMem
+    }
+
+-- | Print interference information to stdout.
+printInterferenceGPU :: Action GPUMem
+printInterferenceGPU =
+  Action
+    { actionName = "print interference gpu",
+      actionDescription = "Print interference information on gpu.",
+      actionProcedure = liftIO . putStrLn . pretty . Interference.analyseProgGPU
+    }
+
+-- | Print memory alias information to stdout
+printMemAliasGPU :: Action GPUMem
+printMemAliasGPU =
+  Action
+    { actionName = "print mem alias gpu",
+      actionDescription = "Print memory alias information on gpu.",
+      actionProcedure = liftIO . putStrLn . pretty . MemAlias.analyzeGPUMem
     }
 
 -- | Print call graph to stdout.
@@ -177,7 +209,7 @@ compileCAction fcfg mode outpath =
     }
   where
     helper prog = do
-      cprog <- handleWarnings fcfg $ SequentialC.compileProg prog
+      cprog <- handleWarnings fcfg $ SequentialC.compileProg (T.pack versionString) prog
       let cpath = outpath `addExtension` "c"
           hpath = outpath `addExtension` "h"
           jsonpath = outpath `addExtension` "json"
@@ -205,7 +237,7 @@ compileOpenCLAction fcfg mode outpath =
     }
   where
     helper prog = do
-      cprog <- handleWarnings fcfg $ COpenCL.compileProg prog
+      cprog <- handleWarnings fcfg $ COpenCL.compileProg (T.pack versionString) prog
       let cpath = outpath `addExtension` "c"
           hpath = outpath `addExtension` "h"
           jsonpath = outpath `addExtension` "json"
@@ -240,7 +272,7 @@ compileCUDAAction fcfg mode outpath =
     }
   where
     helper prog = do
-      cprog <- handleWarnings fcfg $ CCUDA.compileProg prog
+      cprog <- handleWarnings fcfg $ CCUDA.compileProg (T.pack versionString) prog
       let cpath = outpath `addExtension` "c"
           hpath = outpath `addExtension` "h"
           jsonpath = outpath `addExtension` "json"
@@ -262,41 +294,6 @@ compileCUDAAction fcfg mode outpath =
           liftIO $ T.writeFile cpath $ cPrependHeader $ CCUDA.asServer cprog
           runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
 
--- | The @futhark metal@ action .
-{- The Following is needed:
-   .m File Creation (For Command Buffer, and Obj-C Reflection of C code) 
-   .h (ObjC) Header Creation (For .m Files) 
-   Metal Kernal generation (Generate .metal files from C)
--}
-compileMetalAction :: FutharkConfig -> CompilerMode => FilePath -> Action GPUMem
-compileMetalAction fcfg mode outpath =
-  Action
-  { actionName = "Compile to Metal",
-    actionDescription = "Compile to Metal/MSL",
-    actionProcedure = helper 
-  }
-  where   
-    helper prog = do 
-      cprog <- handleWarnings fcfg $ Metal.compileProg prog 
-      let cpath = outpath `addExtension` "m"
-          hpath = outpath `addExtension` "h"
-          mpath = outpath `addExtension` "metal" --Perhaps this should just be a dup of passed C code Modified with a Kernel Keyword
-          jsonpath = outpath `addExtension` "json"
-      case mode of
-        ToLibrary -> do 
-          let (header, impl, manifest) = Metal.asLibrary cprog -- create Metal Lib
-          liftIO $ T.writeFile hpath $ cPrependHeader header --h Files
-          liftIO $ T.writeFile cpath $ cPrependHeader impl -- m Files
-          liftIO $ T.WriteFile mpath $ cPrependHeader impl -- Metal Files
-          liftIO $ T.writeFile jsonpath manifest 
-        ToExecutable -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asExecutable cprog
-          --Build ObjC with Clang!
-          runCC cpath outpath ["-g -fgnu-runtime -O", "-std=gnu99"] --("-lm" : extra_options)
-        ToServer -> do
-          liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asServer cprog
-          runCC cpath outpath ["-g -fgnu-runtime -O", "-std=gnu99"] --("-lm" : extra_options)
-
 -- | The @futhark multicore@ action.
 compileMulticoreAction :: FutharkConfig -> CompilerMode -> FilePath -> Action MCMem
 compileMulticoreAction fcfg mode outpath =
@@ -307,7 +304,7 @@ compileMulticoreAction fcfg mode outpath =
     }
   where
     helper prog = do
-      cprog <- handleWarnings fcfg $ MulticoreC.compileProg prog
+      cprog <- handleWarnings fcfg $ MulticoreC.compileProg (T.pack versionString) prog
       let cpath = outpath `addExtension` "c"
           hpath = outpath `addExtension` "h"
           jsonpath = outpath `addExtension` "json"
@@ -415,7 +412,9 @@ compileCtoWASMAction fcfg mode outpath =
     }
   where
     helper prog = do
-      (cprog, jsprog, exps) <- handleWarnings fcfg $ SequentialWASM.compileProg prog
+      (cprog, jsprog, exps) <-
+        handleWarnings fcfg $
+          SequentialWASM.compileProg (T.pack versionString) prog
       case mode of
         ToLibrary -> do
           writeLibs cprog jsprog
@@ -447,7 +446,9 @@ compileMulticoreToWASMAction fcfg mode outpath =
     }
   where
     helper prog = do
-      (cprog, jsprog, exps) <- handleWarnings fcfg $ MulticoreWASM.compileProg prog
+      (cprog, jsprog, exps) <-
+        handleWarnings fcfg $
+          MulticoreWASM.compileProg (T.pack versionString) prog
 
       case mode of
         ToLibrary -> do

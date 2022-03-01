@@ -128,11 +128,11 @@ import Futhark.IR.Prop
 import Futhark.IR.Prop.Aliases
 import Futhark.IR.Syntax
 import Futhark.IR.Traversals
+import qualified Futhark.IR.TypeCheck as TC
 import qualified Futhark.Optimise.Simplify.Engine as Engine
 import Futhark.Optimise.Simplify.Rep
 import Futhark.Transform.Rename
 import Futhark.Transform.Substitute
-import qualified Futhark.TypeCheck as TC
 import Futhark.Util
 import Futhark.Util.Pretty (indent, ppr, text, (<+>), (</>))
 import qualified Futhark.Util.Pretty as PP
@@ -767,7 +767,7 @@ matchReturnType rettype res ts = do
 
 matchPatToExp ::
   (Mem rep inner, LetDec rep ~ LetDecMem, TC.Checkable rep) =>
-  Pat (Aliases rep) ->
+  Pat (LetDec (Aliases rep)) ->
   Exp (Aliases rep) ->
   TC.TypeM rep ()
 matchPatToExp pat e = do
@@ -901,7 +901,7 @@ checkMemInfo name (MemArray _ shape _ (ArrayIn v ixfun)) = do
             ++ ")"
 
 bodyReturnsFromPat ::
-  PatT (MemBound NoUniqueness) -> [(VName, BodyReturns)]
+  Pat (MemBound NoUniqueness) -> [(VName, BodyReturns)]
 bodyReturnsFromPat pat =
   map asReturns $ patElems pat
   where

@@ -110,8 +110,8 @@ Compound types can be constructed based on the primitive types.  The
 Futhark type system is entirely structural, and type abbreviations are
 merely shorthands (with one exception, see
 :ref:`sizes-in-abbreviations`).  The only exception is abstract types
-whose definition has been hidden via the module system (see `Module
-System`_).
+whose definition has been hidden via the module system (see
+:ref:`module-system`).
 
 .. productionlist::
    tuple_type: "(" ")" | "(" `type` ("," `type`)+ ")"
@@ -197,8 +197,9 @@ first class.  See :ref:`hofs` for the details.
 
 .. productionlist::
    stringlit: '"' `stringchar`* '"'
-   charlit: "'" `stringchar` "'"
-   stringchar: <any source character except "\" or newline or quotes>
+   stringchar: <any source character except "\" or newline or double quotes>
+   charlit: "'" `char` "'"
+   char: <any source character except "\" or newline or single quotes>
 
 String literals are supported, but only as syntactic sugar for UTF-8
 encoded arrays of ``u8`` values.  There is no character type in
@@ -215,41 +216,46 @@ unknowable array sizes.
 Declarations
 ------------
 
-A Futhark file or module consists of a sequence of declarations.  Each
-declaration is processed in order, and a declaration can only refer to
-names bound by preceding declarations.
+A Futhark module consists of a sequence of declarations.  Files are
+also modules.  Each declaration is processed in order, and a
+declaration can only refer to names bound by preceding declarations.
 
 .. productionlist::
-   dec:   `fun_bind` | `val_bind` | `type_bind` | `mod_bind` | `mod_type_bind`
+   dec:   `val_bind` | `type_bind` | `mod_bind` | `mod_type_bind`
       : | "open" `mod_exp`
       : | "import" `stringlit`
       : | "local" `dec`
       : | "#[" attr "]" dec
 
-The ``open`` declaration brings names defined in another module into
-scope (see also `Module System`_).  For the meaning of ``import``, see
-`Referring to Other Files`_.  If a declaration is prefixed with
-``local``, whatever names it defines will *not* be visible outside the
-current module.  In particular ``local open`` is used to bring names
-from another module into scope, without making those names available
-to users of the module being defined.  In most cases, using module
-type ascription is a better idea.
+Any names defined by a declaration inside a module are by default
+visible to users of that module (see :ref:`module-system`).
+
+* ``open mod_exp`` brings names bound in ``mod_exp`` into the current scope.
+  These names will also be visible to users of the module.
+
+* ``local dec`` has the meaning of ``dec``, but any names bound by
+  ``dec`` will not be visible outside the module.
+
+* ``import "foo"`` is a shorthand for ``local open import "foo"``,
+  where the ``import`` is interpreted as a module expression (see
+  :ref:`module-system`).
+
+* ``#[attr] dec`` adds an attribute to a declaration (see :ref:`attributes`).
 
 Declaring Functions and Values
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. productionlist::
-   fun_bind:   ("let" | "entry") (`id` | "(" `binop` ")") `type_param`* `pat`+ [":" `type`] "=" `exp`
-           : | ("let" | "entry") `pat` `binop` `pat` [":" `type`] "=" `exp`
+   val_bind:   ("def" | "entry" | "let") (`id` | "(" `binop` ")") `type_param`* `pat`* [":" `type`] "=" `exp`
+           : | ("def" | "entry" | "let") `pat` `binop` `pat` [":" `type`] "=" `exp`
 
-.. productionlist::
-   val_bind: "let" `id` [":" `type`] "=" `exp`
+**Note:** using ``let`` to define top-level bindings is deprecated.
 
-Functions and values must be defined before they are used.  A function
+Functions and constants must be defined before they are used.  A function
 declaration must specify the name, parameters, and body
 of the function::
 
-  let name params...: rettype = body
+  def name params...: rettype = body
 
 Hindley-Milner-style type inference is supported.  A parameter may be
 given a type with the notation ``(name: type)``.  Functions may not be
@@ -258,13 +264,13 @@ parameter types; see `Size Types`_.  A function can be *polymorphic*
 by using type parameters, in the same way as for `Type
 Abbreviations`_::
 
-  let reverse [n] 't (xs: [n]t): [n]t = xs[::-1]
+  def reverse [n] 't (xs: [n]t): [n]t = xs[::-1]
 
 Type parameters for a function do not need to cover the types of all
 parameters.  The type checker will add more if necessary.  For
 example, the following is well typed::
 
-  let pair 'a (x: a) y = (x, y)
+  def pair 'a (x: a) y = (x, y)
 
 A new type variable will be invented for the parameter ``y``.
 
@@ -274,7 +280,7 @@ passed for a type parameter *t*, all other arguments passed of type
 *t* must have the same shape as *v*.  For example, consider the following
 definition::
 
-  let pair 't (x: t) (y: t) = (x, y)
+  def pair 't (x: t) (y: t) = (x, y)
 
 The application ``pair [1] [2,3]`` will fail at run-time.
 
@@ -287,16 +293,16 @@ User-Defined Operators
 
 Infix operators are defined much like functions::
 
-  let (p1: t1) op (p2: t2): rt = ...
+  def (p1: t1) op (p2: t2): rt = ...
 
 For example::
 
-  let (a:i32,b:i32) +^ (c:i32,d:i32) = (a+c, b+d)
+  def (a:i32,b:i32) +^ (c:i32,d:i32) = (a+c, b+d)
 
 We can also define operators by enclosing the operator name in
 parentheses and suffixing the parameters, as an ordinary function::
 
-  let (+^) (a:i32,b:i32) (c:i32,d:i32) = (a+c, b+d)
+  def (+^) (a:i32,b:i32) (c:i32,d:i32) = (a+c, b+d)
 
 This is necessary when defining a polymorphic operator.
 
@@ -320,7 +326,7 @@ inaccessible, except through the ``intrinsics`` module.
 An infix operator can also be defined with prefix notation, like an
 ordinary function, by enclosing it in parentheses::
 
-  let (+) (x: i32) (y: i32) = x - y
+  def (+) (x: i32) (y: i32) = x - y
 
 This is necessary when defining operators that take type or shape
 parameters.
@@ -330,7 +336,7 @@ parameters.
 Entry Points
 ~~~~~~~~~~~~
 
-Apart from declaring a function with the keyword ``let``, it can also
+Apart from declaring a function with the keyword ``def``, it can also
 be declared with ``entry``.  When the Futhark program is compiled any
 top-level function declared with ``entry`` will be exposed as an entry
 point.  If the Futhark program has been compiled as a library, these
@@ -349,7 +355,7 @@ Value Declarations
 
 A named value/constant can be declared as follows::
 
-  let name: type = definition
+  def name: type = definition
 
 The definition can be an arbitrary expression, including function
 calls and other values, although they must be in scope before the
@@ -364,7 +370,7 @@ Type Abbreviations
 ~~~~~~~~~~~~~~~~~~
 
 .. productionlist::
-   type_bind: "type" ["^" | "~"] `id` `type_param`* "=" `type`
+   type_bind: ("type" | "type^" | "type~") `id` `type_param`* "=" `type`
    type_param: "[" `id` "]" | "'" `id` | "'~" `id` | "'^" `id`
 
 Type abbreviations function as shorthands for the purpose of
@@ -389,7 +395,7 @@ brackets.  Example::
 
   type two_intvecs [n] = ([n]i32, [n]i32)
 
-  let x: two_intvecs [2] = (iota 2, replicate 2 0)
+  def x: two_intvecs [2] = (iota 2, replicate 2 0)
 
 Size parameters work much like shape declarations for arrays.  Like
 shape declarations, they can be elided via square brackets containing
@@ -404,7 +410,7 @@ prefixed with single quotes::
 
   type two_vecs [n] 't = ([n]t, [n]t)
   type two_intvecs [n] = two_vecs [n] i32
-  let x: two_vecs [2] i32 = (iota 2, replicate 2 0)
+  def x: two_vecs [2] i32 = (iota 2, replicate 2 0)
 
 A *size-lifted type parameter* is prefixed with ``'~``, and a *fully
 lifted type parameter* with ``'^``.  These have the same rules and
@@ -477,11 +483,11 @@ literals and variables, but also more complicated forms.
       : | `constructor` `pat`*
       : | `pat` ":" `type`
       : | "#[" `attr` "]" `pat`
-   pat_literal: [ "-" ] `intnumber`
-              | [ "-" ] `floatnumber`
-              | `charlit`
-              | "true"
-              | "false"
+   pat_literal:   [ "-" ] `intnumber`
+              : | [ "-" ] `floatnumber`
+              : | `charlit`
+              : | "true"
+              : | "false"
    loopform :   "for" `id` "<" `exp`
             : | "for" `pat` "in" `exp`
             : | "while" `exp`
@@ -507,7 +513,7 @@ in natural text.
 * An expression ``x.y`` may either be a reference to the name ``y`` in
   the module ``x``, or the field ``y`` in the record ``x``.  Modules
   and values occupy the same name space, so this is disambiguated by
-  the type of ``x``.
+  whether ``x`` is a value or module.
 
 * A type ascription (``exp : type``) cannot appear as an array
   index, as it conflicts with the syntax for slicing.
@@ -525,21 +531,27 @@ in natural text.
   enclosed in parentheses, rather than an operator section partially
   applying the infix operator ``-``.
 
-* Function application and prefix operators bind more tightly than any
-  infix operator.  Note that the only prefix operators are ``!`` and
-  ``-``, and more cannot be defined.
+* Function and type application, and prefix operators, bind more
+  tightly than any infix operator.  Note that the only prefix
+  operators are ``!`` and ``-``, and more cannot be defined.
+
+* ``#foo #bar`` is interpreted as a constructor with a ``#bar``
+  payload, not as applying ``#foo`` to ``#bar`` (the latter would be
+  semantically invalid anyway).
 
 * The following table describes the precedence and associativity of
-  infix operators.  All operators in the same row have the same
-  precedence.  The rows are listed in increasing order of precedence.
-  Note that not all operators listed here are used in expressions;
-  nevertheless, they are still used for resolving ambiguities.
+  infix operators in both expressions and type expressions.  All
+  operators in the same row have the same precedence.  The rows are
+  listed in increasing order of precedence.  Note that not all
+  operators listed here are used in expressions; nevertheless, they
+  are still used for resolving ambiguities.
 
   =================  =============
   **Associativity**  **Operators**
   =================  =============
   left               ``,``
   left               ``:``, ``:>``
+  left               ```op```
   left               ``||``
   left               ``&&``
   left               ``<=`` ``>=`` ``>`` ``<`` ``==`` ``!=``
@@ -777,6 +789,11 @@ are:
   ``<``, ``<=``.  ``>``, ``>=``
 
       Company any two values of numeric type for equality.
+
+  ```op```
+
+      Use ``op``, which may be any non-operator function name, as an
+      infix operator.
 
 ``x && y``
 ..........
@@ -1053,7 +1070,7 @@ parameters), as well as in return types, *size annotations* may be
 used to express invariants about the shapes of arrays that are
 accepted or produced by the function.  For example::
 
-  let f [n] (a: [n]i32) (b: [n]i32): [n]i32 =
+  def f [n] (a: [n]i32) (b: [n]i32): [n]i32 =
     map2 (+) a b
 
 We use a *size parameter*, ``[n]``, to explicitly quantify sizes.  The
@@ -1076,7 +1093,7 @@ constraints imposed by size annotations.
 *Size-dependent types* are supported, as the names of parameters can
 be used in the return type of a function::
 
-  let replicate 't (n: i64) (x: t): [n]t = ...
+  def replicate 't (n: i64) (x: t): [n]t = ...
 
 An application ``replicate 10 0`` will have type ``[10]i32``.
 
@@ -1205,7 +1222,7 @@ runtime-checked coercion of one size to another.  Since size
 annotations can refer only to variables and constants, this is
 necessary when writing more complicated size functions::
 
-  let concat_to 'a (m: i32) (a: []a) (b: []a) : [m]a =
+  def concat_to 'a (m: i32) (a: []a) (b: []a) : [m]a =
     a ++ b :> [m]a
 
 Only expression-level type annotations give rise to run-time checks.
@@ -1222,11 +1239,11 @@ sizes of concrete values passed along as parameters.  This means that
 any size parameter must be used as the size of some parameter.  This
 is an error::
 
-  let f [n] (x: i32) = n
+  def f [n] (x: i32) = n
 
 The following is not an error::
 
-  let f [n] (g: [n]i32 -> [n]i32) = ...
+  def f [n] (g: [n]i32 -> [n]i32) = ...
 
 However, using this function comes with a constraint: whenever an
 application ``f x`` occurs, the value of the size parameter must be
@@ -1242,7 +1259,7 @@ The causality restriction only occurs when a function has size
 parameters whose first use is *not* as a concrete array size.  For
 example, it does not apply to uses of the following function::
 
-  let f [n] (arr: [n]i32) (g: [n]i32 -> [n]i32) = ...
+  def f [n] (arr: [n]i32) (g: [n]i32 -> [n]i32) = ...
 
 This is because the proper value of ``n`` can be read directly from
 the actual size of the array.
@@ -1256,7 +1273,7 @@ example, in the following program we are forcing the elements of ``a``
 to be the same as the elements of ``b``, but the size of the elements
 of ``b`` are not known at the time ``a`` is constructed::
 
-  let main (b: bool) (xs: []i32) =
+  def main (b: bool) (xs: []i32) =
     let a = [] : [][]i32
     let b = [filter (>0) xs]
     in a[0] == b[0]
@@ -1272,7 +1289,7 @@ This is illegal::
 
   type sum = #foo ([]i32) | #bar ([]i32)
 
-  let main (xs: *[]i32) =
+  def main (xs: *[]i32) =
     let v : sum = #foo xs
     in xs
 
@@ -1382,7 +1399,7 @@ Generally, most language constructs produce new arrays, but some
 When defining a function parameter or return type, we can mark it as
 *unique* by prefixing it with an asterisk.  For example::
 
-  let modify (a: *[]i32) (i: i32) (x: i32): *[]i32 =
+  def modify (a: *[]i32) (i: i32) (x: i32): *[]i32 =
     a with [i] = a[i] + x
 
 For bulk in-place updates with multiple values, use the ``scatter``
@@ -1441,8 +1458,8 @@ functions:
 
 .. _module-system:
 
-Module System
--------------
+Modules
+-------
 
 .. productionlist::
    mod_bind: "module" `id` `mod_param`* "=" [":" mod_type_exp] "=" `mod_exp`
@@ -1458,101 +1475,32 @@ parametric modules are called structs, signatures, and functors,
 respectively.  Module names exist in the same name space as values,
 but module types are their own name space.
 
-Named modules are declared as::
+Module bindings
+~~~~~~~~~~~~~~~
 
-  module name = ...
+``module m = mod_exp``
+......................
 
-A named module type is defined as::
+Binds *m* to the module produced by the module expression ``mod_exp``.
+Any name x in the module produced by ``mod_exp`` can then be accessed
+with ``m.x``.
 
-  module type name = ...
+``module m : mod_type_exp = mod_exp``
+.....................................
 
-Where a module expression can be the name of another module, an
-application of a parametric module, or a sequence of declarations
-enclosed in curly braces::
+Shorthand for ``module m = mod_exp : mod_type_exp``.
 
-  module Vec3 = {
-    type t = ( f32 , f32 , f32 )
-    let add(a: t) (b: t): t =
-      let (a1, a2, a3) = a in
-      let (b1, b2, b3) = b in
-      (a1 + b1, a2 + b2 , a3 + b3)
-  }
+``module m mod_params... = mod_exp``
+....................................
 
-  module AlsoVec3 = Vec3
+Shorthand for ``module m = \mod_params... -> mod_exp``.  This produces
+a parametric module.
 
-Functions and types within modules can be accessed using dot
-notation::
+``module type mt = mod_type_exp``
+.................................
 
-    type vector = Vec3.t
-    let double(v: vector): vector = Vec3.add v v
-
-We can also use ``open Vec3`` to bring the names defined by ``Vec3``
-into the current scope.  Multiple modules can be opened simultaneously
-by separating their names with spaces.  In case several modules define
-the same names, the ones mentioned last take precedence.  The first
-argument to ``open`` may be a full module expression.
-
-Named module types are defined as::
-
-  module type ModuleTypeName = ...
-
-A module type expression can be the name of another module type, or a
-sequence of *specifications*, or *specs*, enclosed in curly braces.  A
-spec can be a *value spec*, indicating the presence of a function or
-value, an *abstract type spec*, or a *type abbreviation spec*.  For
-example::
-
-  module type Addable = {
-    type t                 -- abstract type spec
-    type two_ts = (t,t)    -- type abbreviation spec
-    val add: t -> t -> t   -- value spec
-  }
-
-This module type specifies the presence of an *abstract type* ``t``,
-as well as a function operating on values of type ``t``.  We can use
-*module type ascription* to restrict a module to what is exposed by
-some module type::
-
-  module AbstractVec = Vec3 : Addable
-
-The definition of ``AbstractVec.t`` is now hidden.  In fact, with this
-module type, we can neither construct values of type ``AbstractVec.T``
-or convert them to anything else, making this a rather useless use of
-abstraction.  As a derived form, we can write ``module M: S = e`` to
-mean ``module M = e : S``.
-
-In a value spec, sizes in types on the left-hand side of a function
-arrow must not be anonymous.  For example, this is forbidden::
-
-  val sum: []t -> t
-
-Instead write::
-
-  val sum [n]: [n]t -> t
-
-But this is allowed, because the empty size is not to the left of a
-function arrow::
-
-  val evens [n]: [n]i32 -> []i32
-
-Parametric modules allow us to write definitions that abstract over
-modules.  For example::
-
-  module Times = \(M: Addable) -> {
-    let times (x: M.t) (k: i32): M.t =
-      loop x' = x for i < k do
-        M.add x' x
-  }
-
-We can instantiate ``Times`` with any module that fulfils the module
-type ``Addable`` and get back a module that defines a function
-``times``::
-
-  module Vec3Times = Times Vec3
-
-Now ``Vec3Times.times`` is a function of type ``Vec3.t -> int ->
-Vec3.t``.  As a derived form, we can write ``module M p = e`` to mean
-``module M = \p -> e``.
+Binds *mt* to the module type produced by the module type expression
+``mod_type_exp``.
 
 Module Expressions
 ~~~~~~~~~~~~~~~~~~
@@ -1613,7 +1561,7 @@ module defines any name defined by any declaration that is not
 ................
 
 Returns a module that contains the definitions of the file ``"foo"``
-relative to the current file.  See :ref:`other-files`.
+relative to the current file.
 
 Module Type Expressions
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -1628,14 +1576,13 @@ Module Type Expressions
 
 
 .. productionlist::
-   spec:   "val" `id` `type_param`* ":" `spec_type`
-       : | "val" `binop` `type_param`* ":" `spec_type`
-       : | "type" ["^"] `id` `type_param`* "=" `type`
-       : | "type" ["^"] `id` `type_param`*
+   spec:   "val" `id` `type_param`* ":" `type`
+       : | "val" `binop` `type_param`* ":" `type`
+       : | ("type" | "type^" | "type~") `id` `type_param`* "=" `type`
+       : | ("type" | "type^" | "type~") `id` `type_param`*
        : | "module" `id` ":" `mod_type_exp`
        : | "include" `mod_type_exp`
        : | "#[" attr "]" spec
-   spec_type: `type` | `type` "->" `spec_type`
 
 Module types classify modules, with the only (unimportant) difference
 in expressivity being that modules can contain module types, but
@@ -1643,10 +1590,29 @@ module types cannot specify that a module must contain a specific
 module type. They can specify of course that a module contains a
 *submodule* of a specific module type.
 
+A module type expression can be the name of another module type, or a
+sequence of *specifications*, or *specs*, enclosed in curly braces.  A
+spec can be a *value spec*, indicating the presence of a function or
+value, an *abstract type spec*, or a *type abbreviation spec*.
+
+In a value spec, sizes in types on the left-hand side of a function
+arrow must not be anonymous.  For example, this is forbidden::
+
+  val sum: []t -> t
+
+Instead write::
+
+  val sum [n]: [n]t -> t
+
+But this is allowed, because the empty size is not to the left of a
+function arrow::
+
+  val evens [n]: [n]i32 -> []i32
+
 .. _other-files:
 
-Referring to Other Files
-------------------------
+Referencing Other Files
+-----------------------
 
 You can refer to external files in a Futhark file like this::
 
@@ -1672,6 +1638,10 @@ In fact, a plain ``import "file"`` is equivalent to::
 
   local open import "file"
 
+To re-export names from another file in the current module, use::
+
+  open import "file"
+
 .. _attributes:
 
 Attributes
@@ -1679,7 +1649,7 @@ Attributes
 
 .. productionlist::
    attr:   `id`
-       :   `decimal`
+       : | `decimal`
        : | `id` "(" [`attr` ("," `attr`)*] ")"
 
 An expression, declaration, pattern, or module type spec can be

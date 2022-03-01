@@ -24,11 +24,11 @@ import Futhark.IR.GPU.Op
 import Futhark.IR.GPU.Simplify (simplifyKernelOp)
 import Futhark.IR.Mem
 import Futhark.IR.Mem.Simplify
+import qualified Futhark.IR.TypeCheck as TC
 import Futhark.MonadFreshNames
 import qualified Futhark.Optimise.Simplify.Engine as Engine
 import Futhark.Pass
 import Futhark.Pass.ExplicitAllocations (BuilderOps (..), mkLetNamesB', mkLetNamesB'')
-import qualified Futhark.TypeCheck as TC
 
 data GPUMem
 
@@ -96,16 +96,18 @@ simpleGPUMem :: Engine.SimpleOps GPUMem
 simpleGPUMem =
   simpleGeneric usage $ simplifyKernelOp $ const $ return ((), mempty)
   where
-    -- Slightly hackily, we look at the inside of SegGroup operations
-    -- to figure out the sizes of local memory allocations, and add
-    -- usages for those sizes.  This is necessary so the simplifier
-    -- will hoist those sizes out as far as possible (most
-    -- importantly, past the versioning If).
-    usage (SegOp (SegMap SegGroup {} _ _ kbody)) = localAllocs kbody
+    -- Slightly hackily and very inefficiently, we look at the inside
+    -- of SegOps to figure out the sizes of local memory allocations,
+    -- and add usages for those sizes.  This is necessary so the
+    -- simplifier will hoist those sizes out as far as possible (most
+    -- importantly, past the versioning If, but see also #1569).
+    usage (SegOp (SegMap _ _ _ kbody)) = localAllocs kbody
     usage _ = mempty
     localAllocs = foldMap stmLocalAlloc . kernelBodyStms
     stmLocalAlloc = expLocalAlloc . stmExp
-    expLocalAlloc (Op (Alloc (Var v) (Space "local"))) =
+    expLocalAlloc (Op (Alloc (Var v) _)) =
       UT.sizeUsage v
+    expLocalAlloc (Op (Inner (SegOp (SegMap _ _ _ kbody)))) =
+      localAllocs kbody
     expLocalAlloc _ =
       mempty

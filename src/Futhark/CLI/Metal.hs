@@ -13,7 +13,7 @@ main = compilerMain
   ()
   []
   "Compile Metal"
-  "Generate Metal/MSL code from optimised Futhark program."
+  "Generate Metal code from optimised Futhark program."
   gpuPipeline
   $ \fcfg () mode outpath prog ->
     actionProcedure (compileMetalAction fcfg mode outpath) prog

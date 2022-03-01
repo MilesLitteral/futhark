@@ -1,18 +1,16 @@
 -- | Imperative code with an Metal component.
 --
--- Apart from ordinary imperative code, this also carries around a
--- Metal Program as a string, as well as a list of kernels defined by
--- the Metal Library.
+-- Apart from ordinary imperative code, this also carries around an
+-- Metal program as a string, as well as a list of kernels defined by
+-- the Metal program.
 --
 -- The imperative code has been augmented with a 'LaunchKernel'
--- operation that allows one to execute a Metal kernel.
+-- operation that allows one to execute an Metal kernel.
 module Futhark.CodeGen.ImpCode.Metal
   ( Program (..),
-    Function,
-    FunctionT (Function),
-    Code,
     KernelName,
     KernelArg (..),
+    CLCode,
     Metal (..),
     KernelSafety (..),
     numFailureParams,
@@ -25,44 +23,9 @@ where
 
 import qualified Data.Map as M
 import qualified Data.Text as T
-import Futhark.CodeGen.ImpCode hiding (Code, Function)
-import qualified Futhark.CodeGen.ImpCode as Imp
+import Futhark.CodeGen.ImpCode
 import Futhark.IR.GPU.Sizes
 import Futhark.Util.Pretty
-
-
-{-
-    This is what CodeGen must create
-
-    -- By Default, Metallib is made at compilation time however this is an alternative test to run const chars as Metal Scripts
-    -- Possibly more Important for Futhark
-    void generateMetalLib(const char *src, mtlpp::Device device){
-    -- Example *src:
-    -- const char shadersSrc[] = 
-    --         "#include <metal_stdlib>";
-    --         "using namespace metal;";
-    --         "kernel void sqr(";
-    --             "const device float *vIn [[ buffer(0) ]],";
-    --             "device float *vOut [[ buffer(1) ]],";
-    --             "uint id[[ thread_position_in_grid ]])";
-    --         "{";
-    --             "vOut[id] = vIn[id] * vIn[id];";       
-    --         "}";
-
-        ns::Error* error = NULL; //nullptr
-        
-        mtlpp::Library library  = device.NewLibrary(src, mtlpp::CompileOptions(), error);
-        assert(library);
-        mtlpp::Function sqrFunc = library.NewFunction("sqr");
-        assert(sqrFunc);
-
-        mtlpp::ComputePipelineState computePipelineState = device.NewComputePipelineState(sqrFunc, error);
-        assert(computePipelineState);
-
-        mtlpp::CommandQueue commandQueue = device.NewCommandQueue();
-        assert(commandQueue);
-    }
--}
 
 -- | An program calling Metal kernels.
 data Program = Program
@@ -72,7 +35,7 @@ data Program = Program
     metalKernelNames :: M.Map KernelName KernelSafety,
     -- | So we can detect whether the device is capable.
     metalUsedTypes :: [PrimType],
-    -- | Runtime-Immutable constants.
+    -- | Runtime-configurable constants.
     metalSizes :: M.Map Name SizeClass,
     -- | Assertion failure error messages.
     metalFailures :: [FailureMsg],
@@ -86,11 +49,8 @@ data FailureMsg = FailureMsg
     failureBacktrace :: String
   }
 
--- | A function calling Metal kernels. 
-type Function = Imp.Function Metal
-
--- | A piece of code calling OpenCL.
-type Code = Imp.Code Metal
+-- | A piece of code calling Metal.
+type CLCode = Code Metal
 
 -- | The name of a kernel.
 type KernelName = Name
@@ -132,7 +92,7 @@ numFailureParams SafetyFull = 3
 
 -- | Host-level Metal operation.
 data Metal
-  = LaunchKernel KernelSafety KernelName [KernelArg] [Exp] [Exp] --(AKA THIS IS WHERE sendComputeCommand() IS CALLED)
+  = LaunchKernel KernelSafety KernelName [KernelArg] [Exp] [Exp]
   | GetSize VName Name
   | CmpSizeLe VName Name Exp
   | GetSizeMax VName SizeClass

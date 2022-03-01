@@ -10,7 +10,6 @@
 module Futhark.CodeGen.ImpGen.GPU
   ( compileProgOpenCL,
     compileProgCUDA,
-    compileProgMetal
     Warnings,
   )
 where
@@ -48,8 +47,8 @@ callKernelOperations =
       opsAllocCompilers = mempty
     }
 
-openclAtomics, cudaAtomics, metalAtomics :: AtomicBinOp
-(openclAtomics, cudaAtomics, metalAtomics) = (flip lookup opencl, flip lookup cuda, flip lookup metal)
+openclAtomics, cudaAtomics :: AtomicBinOp
+(openclAtomics, cudaAtomics) = (flip lookup opencl, flip lookup cuda)
   where
     opencl64 =
       [ (Add Int64 OverflowUndef, Imp.AtomicAdd Int64),
@@ -77,11 +76,6 @@ openclAtomics, cudaAtomics, metalAtomics :: AtomicBinOp
         ++ [ (FAdd Float32, Imp.AtomicFAdd Float32),
              (FAdd Float64, Imp.AtomicFAdd Float64)
            ]
-    metal =
-      opencl
-        ++ [ (FAdd Float32, Imp.AtomicFAdd Float32),
-             (FAdd Float64, Imp.AtomicFAdd Float64)
-           ]
 
 compileProg ::
   MonadFreshNames m =>
@@ -104,17 +98,15 @@ compileProg env prog =
     setOpSpace op = op
 
 -- | Compile a 'GPUMem' program to low-level parallel code, with
--- either CUDA, OpenCL, or Metal characteristics.
-compileProgMetal,
+-- either CUDA or OpenCL characteristics.
 compileProgOpenCL,
   compileProgCUDA ::
     MonadFreshNames m => Prog GPUMem -> m (Warnings, Imp.Program)
 compileProgOpenCL = compileProg $ HostEnv openclAtomics OpenCL mempty
 compileProgCUDA = compileProg $ HostEnv cudaAtomics CUDA mempty
-compileProgMetal = compileProg $ HostEnv metalAtomics Metal mempty
 
 opCompiler ::
-  Pat GPUMem ->
+  Pat LetDecMem ->
   Op GPUMem ->
   CallKernelGen ()
 opCompiler dest (Alloc e space) =
@@ -166,7 +158,7 @@ sizeClassWithEntryPoint fname (Imp.SizeThreshold path def) =
 sizeClassWithEntryPoint _ size_class = size_class
 
 segOpCompiler ::
-  Pat GPUMem ->
+  Pat LetDecMem ->
   SegOp SegLevel GPUMem ->
   CallKernelGen ()
 segOpCompiler pat (SegMap lvl space _ kbody) =
@@ -186,7 +178,7 @@ segOpCompiler pat segop =
 -- otherwise protected by their own multi-versioning branches deeper
 -- down.  Currently the compiler will not generate multi-versioning
 -- that makes this a problem, but it might in the future.
-checkLocalMemoryReqs :: Imp.Code -> CallKernelGen (Maybe (Imp.TExp Bool))
+checkLocalMemoryReqs :: Imp.HostCode -> CallKernelGen (Maybe (Imp.TExp Bool))
 checkLocalMemoryReqs code = do
   scope <- askScope
   let alloc_sizes = map (sum . map alignedSize . localAllocSizes . Imp.kernelBody) $ getGPU code
@@ -219,7 +211,7 @@ checkLocalMemoryReqs code = do
     alignedSize x = x + ((8 - (x `rem` 8)) `rem` 8)
 
 withAcc ::
-  Pat GPUMem ->
+  Pat LetDecMem ->
   [(Shape, [VName], Maybe (Lambda GPUMem, [SubExp]))] ->
   Lambda GPUMem ->
   CallKernelGen ()
@@ -321,7 +313,7 @@ mapTransposeForType bt = do
 mapTransposeName :: PrimType -> String
 mapTransposeName bt = "gpu_map_transpose_" ++ pretty bt
 
-mapTransposeFunction :: PrimType -> Imp.Function
+mapTransposeFunction :: PrimType -> Imp.Function Imp.HostOp
 mapTransposeFunction bt =
   Imp.Function Nothing [] params transpose_code [] []
   where

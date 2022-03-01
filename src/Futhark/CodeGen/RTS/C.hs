@@ -62,11 +62,6 @@ openclH :: T.Text
 openclH = $(embedStringFile "rts/c/opencl.h")
 {-# NOINLINE openclH #-}
 
--- | @rts/c/mtlpp.hpp@
-metalH :: T.Text
-metalH = $(embedStringFile "rts/c/mtlpp.hpp")
-{-# NOINLINE metalH #-}
-
 -- | @rts/c/scalar_f16.h@
 scalarF16H :: T.Text
 scalarF16H = $(embedStringFile "rts/c/scalar_f16.h")
