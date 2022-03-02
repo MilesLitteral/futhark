@@ -1,5 +1,5 @@
-packages: futhark.cabal
+packages: futhark-metal.cabal
 index-state: 2022-02-03T19:05:34Z
 
-package futhark
+package futhark-metal
   ghc-options: -Werror -j -fwrite-ide-info -hiedir=.hie
