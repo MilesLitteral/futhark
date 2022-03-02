@@ -40,3 +40,8 @@ issue](https://github.com/diku-dk/futhark/issues?q=is%3Aissue+is%3Aopen+label%3A
 do not require deep knowledge of the code base.
 
 For contributing code, see also [the style guide](STYLE.md).
+
+Method?
+=======
+
+https://github.com/google/mlir-hs
