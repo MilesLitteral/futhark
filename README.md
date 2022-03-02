@@ -40,3 +40,42 @@ issue](https://github.com/diku-dk/futhark/issues?q=is%3Aissue+is%3Aopen+label%3A
 do not require deep knowledge of the code base.
 
 For contributing code, see also [the style guide](STYLE.md).
+
+SO WHAT IS THIS?
+================
+This is the Metal branch of Futhark, a version of Futhark which culls OpenCL/CUDA and implements Metal support for Apple/Mac GPUs
+enabling Futhark to compile in the OS X ecosystem. There are a lot of features planned for this branch, some of which are addressed below but an exhaustive list is in progress. Below is also a collection of writing about the experience, goals, and milestones; any help is appreciated as it's currently maintained by just me (Miles J. Litteral/SasoriZero) but I look forward to showing you the progress!
+
+Current Working Version: v0.0.2(Alpha)
+Past Versions: v0.0.1(Pre-Alpha)
+
+Gists on the Project(Planning, theory, How Metal is Different from CUDA/OpenCL, the Method/Mechanisms behind Futhark-Metal that make it possible):
+https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
+
+Roadmap
+=======
+Step 0
+*Connect mtlpp or metal-cpp to Futhark Where it can See mtlpp.hpp ✔️
+*Make Proof of Concept experiments in Metal demonstrating Objective-C++ and how it can be used
+For Futhark's purposes, in this case, potential use-cases (mtlAdder, mtlDot, mtlLib, mtlRenderer) ✔️
+*Build MetalEngine Class based off this research, implement as main mechanism of Futhark-Metal ✔️
+
+Step 1
+*Create and Implmement Futhark.Backend.Metal and all necessary Haskell Code (2/20/22)✔️
+*Build/Compile Prototypes of Futhark-Metal (v001/v002) ✔️ 
+
+Step 2(
+*Stress Test Prototypes<- You are Here!(3/1/22) 🔵
+*Refine Output Code of Prototypes ✖️
+*Implement build flags (Metal Script, Metallib, MetalDyLib) ✖️
+*Unreliable Output
+
+Release
+*Feature Parity with Futhark OpenCL/CUDA ✖️
+*Platform agnostic creation of Metallib/DyLib ✖️
+*Reliable Output
+
+
+
+
+
