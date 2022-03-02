@@ -56,7 +56,7 @@ Roadmap
 =======
 ## Step 0
 
-* Connect mtlpp or metal-cpp to Futhark Where it can See mtlpp.hpp ✔️
+* Connect mtlpp or metal-cpp to Futhark Where it can see main library header (mtlpp.hpp choosen) ✔️
 
 * Make Proof of Concept experiments in Metal demonstrating Objective-C++ and how it can be used
 For Futhark's purposes, in this case, potential use-cases (mtlAdder, mtlDot, mtlLib, mtlRenderer) ✔️
