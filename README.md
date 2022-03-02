@@ -52,6 +52,9 @@ Past Versions: v0.0.1(Pre-Alpha)
 Gists on the Project(Planning, theory, How Metal is Different from CUDA/OpenCL, the Method/Mechanisms behind Futhark-Metal that make it possible):
 https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
 
+Project Issue and Progress Tracker
+https://github.com/users/MilesLitteral/projects/1
+
 Keep an eye out for/on the mlir llvm branch which is coming soon!
 I have plans to also tackle the Vulkan Branch at some point (currently stale, long-term future) 
 
