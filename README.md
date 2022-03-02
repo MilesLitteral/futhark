@@ -71,7 +71,7 @@ For Futhark's purposes, in this case, potential use-cases (mtlAdder, mtlDot, mtl
 
 ## Step 2
 
-* Stress Test Prototypes<- You are Here!(3/1/22) 🔵
+* Stress Test Prototypes <- You are Here!(3/1/22) 🔵
 
 * Refine Output Code of Prototypes ✖️
 
