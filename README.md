@@ -52,6 +52,9 @@ Past Versions: v0.0.1(Pre-Alpha)
 Gists on the Project(Planning, theory, How Metal is Different from CUDA/OpenCL, the Method/Mechanisms behind Futhark-Metal that make it possible):
 https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
 
+Keep an eye out for/on the mlir llvm branch which is coming soon!
+I have plans to also tackle the Vulkan Branch at some point (currently stale, long-term future) 
+
 Roadmap
 =======
 ## Step 0
@@ -77,12 +80,25 @@ For Futhark's purposes, in this case, potential use-cases (mtlAdder, mtlDot, mtl
 
 * Implement build flags (Metal Script, Metallib, MetalDyLib) ✖️
 
-* Unreliable Output
+* Unreliable Output ✖️
 
 ## Release
 
-* Feature Parity with Futhark OpenCL/CUDA ✖️
+* Feature Parity with Futhark OpenCL/CUDA       ✖️
 
-* Platform agnostic creation of Metallib/DyLib ✖️
+* Platform agnostic creation of Metallib/DyLib  ✖️
 
-* Reliable Output
+* Reliable Output   ✖️
+
+
+## Optional
+Futhask-Metal
+
+MoltenVK/MoltenGL bridge:
+MVKCreateInstance
+MVKBuffer
+MVKPipeline
+MVKExecuteOn
+
+Platform-Free Execution (subject to being removed potentially, depends on how development goes)
+Quartz++
