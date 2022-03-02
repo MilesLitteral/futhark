@@ -55,24 +55,36 @@ https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
 Roadmap
 =======
 Step 0
+
 *Connect mtlpp or metal-cpp to Futhark Where it can See mtlpp.hpp ✔️
+
 *Make Proof of Concept experiments in Metal demonstrating Objective-C++ and how it can be used
 For Futhark's purposes, in this case, potential use-cases (mtlAdder, mtlDot, mtlLib, mtlRenderer) ✔️
+
 *Build MetalEngine Class based off this research, implement as main mechanism of Futhark-Metal ✔️
 
 Step 1
+
 *Create and Implmement Futhark.Backend.Metal and all necessary Haskell Code (2/20/22)✔️
+
 *Build/Compile Prototypes of Futhark-Metal (v001/v002) ✔️ 
 
-Step 2(
+Step 2
+
 *Stress Test Prototypes<- You are Here!(3/1/22) 🔵
+
 *Refine Output Code of Prototypes ✖️
+
 *Implement build flags (Metal Script, Metallib, MetalDyLib) ✖️
+
 *Unreliable Output
 
 Release
+
 *Feature Parity with Futhark OpenCL/CUDA ✖️
+
 *Platform agnostic creation of Metallib/DyLib ✖️
+
 *Reliable Output
 
 
