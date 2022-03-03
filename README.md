@@ -43,8 +43,24 @@ For contributing code, see also [the style guide](STYLE.md).
 
 Method?
 =======
+* Build LLVM (cmake -S llvm-project/llvm -B llvm-project/build)
+* Run Command in mlir-hs base folder
 
+  cmake -B llvm-project/build         \
+  -G Ninja                            \ # Use the Ninja build system
+  -DLLVM_ENABLE_PROJECTS=mlir         \ # Enable build MLIR
+  -DCMAKE_INSTALL_PREFIX=/usr/bin/mlir      \ # Install prefix
+  -DMLIR_BUILD_MLIR_C_DYLIB=ON        \ # Build shared libraries
+  -DLLVM_BUILD_LLVM_DYLIB=ON          \
+  llvm-project/llvm
+
+* Run Stack in google-mlir-hs after installing mlir from src
+
+Source Code of mlir-hs:
 https://github.com/google/mlir-hs
+
+Source Codde of LLVM
+https://github.com/llvm/llvm-project
 
 Sample Code?
 ============
