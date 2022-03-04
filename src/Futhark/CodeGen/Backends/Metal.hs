@@ -87,14 +87,11 @@ compileProg version prog = do
         }
     include_metal_h =
       [untrimming|
-       #define CL_TARGET_OPENCL_VERSION 120
-       #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
-       #ifdef __APPLE__
-       #define CL_SILENCE_DEPRECATION
-       #include <OpenCL/cl.h>
-       #else
-       #include <CL/cl.h>
-       #endif
+       #include "mtlpp.hpp"
+       using namespace mtlpp::ResourceOptions;
+       using namespace mtlpp;
+       const unsigned int arrayLength = 10; //1 << 24;
+       const unsigned int bufferSize = arrayLength * sizeof(float);
        |]
 
 cliOptions :: [Option]
@@ -213,10 +210,7 @@ readMetalScalar _ _ _ space _ =
 
 allocateMetalBuffer :: GC.Allocate Metal ()
 allocateMetalBuffer mem size tag "device" =
-  GC.stm
-    [C.cstm|ctx->error =
-     OPENCL_SUCCEED_NONFATAL(opencl_alloc(&ctx->opencl, ctx->log,
-                                          (size_t)$exp:size, $exp:tag, &$exp:mem));|]
+  GC.stm [C.cstm|ctx->error = device.NewBuffer(bufferSize, StorageModeShared);|]
 allocateMetalBuffer _ _ _ space =
   error $ "Cannot allocate in '" ++ space ++ "' memory space."
 
@@ -280,7 +274,7 @@ copyMetalMemory _ _ destspace _ _ srcspace _ =
 metalMemoryType :: GC.MemoryType Metal ()
 metalMemoryType "device" = pure [C.cty|typename cl_mem|]
 metalMemoryType space =
-  error $ "OpenCL backend does not support '" ++ space ++ "' memory space."
+  error $ "Metal backend does not support '" ++ space ++ "' memory space."
 
 staticMetalArray :: GC.StaticArray Metal ()
 staticMetalArray name "device" t vs = do
@@ -302,18 +296,8 @@ staticMetalArray name "device" t vs = do
     typename cl_int success;
     ctx->$id:name.references = NULL;
     ctx->$id:name.size = 0;
-    ctx->$id:name.mem =
-      clCreateBuffer(ctx->opencl.ctx, CL_MEM_READ_WRITE,
-                     ($int:num_elems > 0 ? $int:num_elems : 1)*sizeof($ty:ct), NULL,
-                     &success);
+    ctx->$id:name.mem = device.NewBuffer(bufferSize, StorageModeShared);
     OPENCL_SUCCEED_OR_RETURN(success);
-    if ($int:num_elems > 0) {
-      OPENCL_SUCCEED_OR_RETURN(
-        clEnqueueWriteBuffer(ctx->opencl.queue, ctx->$id:name.mem, CL_TRUE,
-                             0, $int:num_elems*sizeof($ty:ct),
-                             $id:name_realtype,
-                             0, NULL, NULL));
-    }
   }|]
   GC.item [C.citem|struct memblock_device $id:name = ctx->$id:name;|]
 staticMetalArray _ space _ _ =
@@ -328,7 +312,7 @@ callKernel (CmpSizeLe v key x) = do
   sizeLoggingCode v key x'
 callKernel (GetSizeMax v size_class) =
   let field = "max_" ++ pretty size_class
-   in GC.stm [C.cstm|$id:v = ctx->opencl.$id:field;|]
+   in GC.stm [C.cstm|$id:v = ctx->device.$id:field;|]
 callKernel (LaunchKernel safety name args num_workgroups workgroup_size) = do
   -- The other failure args are set automatically when the kernel is
   -- first created.

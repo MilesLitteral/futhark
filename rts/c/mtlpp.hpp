@@ -1,6 +1,12 @@
-/*
+/* 
+ * 2022 Miles J. Litteral (Mtlpp v2+)
+ * https://github.com/MilesLitteral/mtlpp
+ *
+ * Original Credits (Mtlpp v1)
  * Copyright 2016-2017 Nikolay Aleksiev. All rights reserved.
  * License: https://github.com/naleksiev/mtlpp/blob/master/LICENSE
+ * 
+ * 
  */
 
 #pragma once
@@ -81,6 +87,39 @@
 #define MTLPP_IS_AVAILABLE_IOS(ios)  (0 __DARWIN_ALIAS_STARTING_IPHONE___IPHONE_##ios( || 1 ))
 #define MTLPP_IS_AVAILABLE(mac, ios) (MTLPP_IS_AVAILABLE_MAC(mac) || MTLPP_IS_AVAILABLE_IOS(ios))
 
+//////////////////////////////////////
+// FILE: metalEngine.hpp
+//////////////////////////////////////
+/*
+ * Copyright 2022 Miles J. Litteral. All rights reserved.
+ * License: https://github.com/MilesLitteral/mtlpp/blob/master/LICENSE
+ */
+
+// #pragma once
+
+// #include "defines.hpp"
+
+class MetalEngine
+    {
+    mtlpp::Device _mDevice = mtlpp::Device::CreateSystemDefaultDevice();
+    mtlpp::ComputePipelineState _mFunctionPSO;
+    mtlpp::CommandQueue _mCommandQueue;
+    mtlpp::Buffer _mBufferA;
+    mtlpp::Buffer _mBufferB;
+    mtlpp::Buffer _mBufferResult;
+    ns::Error* error; //nullptr
+
+    MetalEngine(mtlpp::Device device);
+    MetalEngine(ns::String libraryPath, ns::String mtlFunction, mtlpp::Device device);
+    MetalEngine(ns::String mtlFunction, mtlpp::Device device);
+    MetalEngine(const char src[], ns::String functionName, mtlpp::Device device);
+    void generateRandomFloatData(mtlpp::Buffer buffer);
+    void prepareData(mtlpp::Device device);
+    void sendComputeCommand(mtlpp::CommandQueue commandQueue);
+    void encodeAddCommand(mtlpp::ComputeCommandEncoder computeEncoder);
+    void verifyResults();
+    void execute(int argc, const char* argv[]);
+};
 
 //////////////////////////////////////
 // FILE: ns.hpp

@@ -95,13 +95,13 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
   GC.earlyDecl [C.cedecl|static const char *tuning_param_names[] = { $inits:size_name_inits };|]
   GC.earlyDecl [C.cedecl|static const char *tuning_param_vars[] = { $inits:size_var_inits };|]
   GC.earlyDecl [C.cedecl|static const char *tuning_param_classes[] = { $inits:size_class_inits };|]
-
+  
   let size_decls = map (\k -> [C.csdecl|typename int64_t *$id:k;|]) $ M.keys sizes
   GC.earlyDecl [C.cedecl|struct tuning_params { $sdecls:size_decls };|]
   cfg <- GC.publicDef "context_config" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:s;|],
       [C.cedecl|struct $id:s { int in_use;
-                               struct opencl_config metal;
+                               struct opencl_config opencl;
                                typename int64_t tuning_params[$int:num_sizes];
                                int num_build_opts;
                                const char **build_opts;
@@ -125,7 +125,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                          cfg->build_opts = (const char**) malloc(sizeof(const char*));
                          cfg->build_opts[0] = NULL;
                          $stms:size_value_inits
-                         opencl_config_init(&cfg->metal, $int:num_sizes,
+                         opencl_config_init(&cfg->opencl, $int:num_sizes,
                                             tuning_param_names, tuning_param_vars,
                                             cfg->tuning_params, tuning_param_classes);
                          return cfg;
@@ -423,8 +423,8 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
     )
 
   GC.publicDef_ "context_new_with_command_queue" GC.InitDecl $ \s ->
-    ( [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename cl_command_queue queue);|],
-      [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename cl_command_queue queue) {
+    ( [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename _mCommand_queue queue);|],
+      [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename _mCommand_queue queue) {
                           assert(!cfg->in_use);
                           struct $id:ctx* ctx = (struct $id:ctx*) malloc(sizeof(struct $id:ctx));
                           if (ctx == NULL) {
@@ -437,7 +437,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                           $stms:set_required_types
 
                           init_context_early(cfg, ctx);
-                          typename cl_program prog = setup_opencl_with_command_queue(&ctx->opencl, queue, opencl_program, required_types, cfg->build_opts);
+                          typename metal_program prog = MetalEngine(&ctx->device);
                           init_context_late(cfg, ctx, prog);
                           return ctx;
                        }|]
@@ -560,11 +560,11 @@ openClDecls cost_centres kernels metal_program =
 
     metal_load =
       [ [C.cedecl|
-void post_metal_setup(struct opencl_context *ctx, struct opencl_device_option *option) {
-  $stms:(map sizeHeuristicsCode sizeHeuristicsTable)
-}|]
+        void post_opencl_setup(struct opencl_context *ctx, struct opencl_device_option *option) {
+          $stms:(map sizeHeuristicsCode sizeHeuristicsTable)
+        }|] 
       ]
-
+    
     program_fragments = metal_program_fragments ++ [[C.cinit|NULL|]]
     metal_boilerplate =
       [C.cunit|
