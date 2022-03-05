@@ -321,8 +321,8 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                          typename FILE *log;
                          $sdecls:fields
                          $sdecls:ctx_opencl_fields
-                         typename cl_mem global_failure;
-                         typename cl_mem global_failure_args;
+                         typename Buffer global_failure;
+                         typename Error  global_failure_args;
                          struct opencl_context metal;
                          struct tuning_params tuning_params;
                          // True if a potentially failing kernel has been enqueued.
@@ -416,15 +416,15 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                           $stms:set_required_types
 
                           init_context_early(cfg, ctx);
-                          typename cl_program prog = setup_opencl(&ctx->opencl, opencl_program, required_types, cfg->build_opts);
+                          typename MetalEngine prog = MetalEngine(&ctx->metal);
                           init_context_late(cfg, ctx, prog);
                           return ctx;
                        }|]
     )
 
   GC.publicDef_ "context_new_with_command_queue" GC.InitDecl $ \s ->
-    ( [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename _mCommand_queue queue);|],
-      [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename _mCommand_queue queue) {
+    ( [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename CommandQueue queue);|],
+      [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename CommandQueue queue) {
                           assert(!cfg->in_use);
                           struct $id:ctx* ctx = (struct $id:ctx*) malloc(sizeof(struct $id:ctx));
                           if (ctx == NULL) {
@@ -437,7 +437,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                           $stms:set_required_types
 
                           init_context_early(cfg, ctx);
-                          typename metal_program prog = MetalEngine(&ctx->device);
+                          typename MetalEngine prog = MetalEngine(&ctx->device);
                           init_context_late(cfg, ctx, prog);
                           return ctx;
                        }|]
@@ -501,9 +501,9 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
     )
 
   GC.publicDef_ "context_get_command_queue" GC.InitDecl $ \s ->
-    ( [C.cedecl|typename cl_command_queue $id:s(struct $id:ctx* ctx);|],
-      [C.cedecl|typename cl_command_queue $id:s(struct $id:ctx* ctx) {
-                 return ctx->opencl.queue;
+    ( [C.cedecl|typename CommandQueue $id:s(struct $id:ctx* ctx);|],
+      [C.cedecl|typename CommandQueue $id:s(struct $id:ctx* ctx) {
+                 return ctx->metal.commandQueue;
                }|]
     )
 
@@ -533,6 +533,7 @@ openClDecls cost_centres kernels metal_program =
         | s <- chunk 2000 $ T.unpack metal_program
       ]
 
+    -- This has to be done over for metal
     ctx_fields =
       [ [C.csdecl|int total_runs;|],
         [C.csdecl|long int total_runtime;|]
@@ -560,7 +561,7 @@ openClDecls cost_centres kernels metal_program =
 
     metal_load =
       [ [C.cedecl|
-        void post_opencl_setup(struct opencl_context *ctx, struct opencl_device_option *option) {
+        void post_metal_setup(struct MetalEngine *ctx) {
           $stms:(map sizeHeuristicsCode sizeHeuristicsTable)
         }|] 
       ]
@@ -568,7 +569,7 @@ openClDecls cost_centres kernels metal_program =
     program_fragments = metal_program_fragments ++ [[C.cinit|NULL|]]
     metal_boilerplate =
       [C.cunit|
-          $esc:("typedef cl_mem fl_mem_t;")
+          $esc:("typedef metal_mem Buffer;")
           $esc:(T.unpack metalH)
           static const char *metal_program[] = {$inits:program_fragments};|]
 
@@ -585,11 +586,11 @@ loadKernel (name, safety) =
   where
     set_global_failure =
       [C.citem|OPENCL_SUCCEED_FATAL(
-                     clSetKernelArg(ctx->$id:name, 0, sizeof(typename cl_mem),
+                     clSetKernelArg(ctx->$id:name, 0, sizeof(typename Buffer),
                                     &ctx->global_failure));|]
     set_global_failure_args =
       [C.citem|OPENCL_SUCCEED_FATAL(
-                     clSetKernelArg(ctx->$id:name, 2, sizeof(typename cl_mem),
+                     clSetKernelArg(ctx->$id:name, 2, sizeof(typename Buffer),
                                     &ctx->global_failure_args));|]
     set_args = case safety of
       SafetyNone -> []

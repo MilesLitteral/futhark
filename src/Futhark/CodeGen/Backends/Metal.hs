@@ -87,9 +87,13 @@ compileProg version prog = do
         }
     include_metal_h =
       [untrimming|
+       #ifdef __cplusplus
        #include "mtlpp.hpp"
        using namespace mtlpp::ResourceOptions;
        using namespace mtlpp;
+       using namespace ns;
+       #endif
+
        const unsigned int arrayLength = 10; //1 << 24;
        const unsigned int bufferSize = arrayLength * sizeof(float);
        |]

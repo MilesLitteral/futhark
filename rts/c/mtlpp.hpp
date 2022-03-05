@@ -1130,6 +1130,14 @@ namespace mtlpp
 
 namespace mtlpp
 {
+    struct metal_config {
+        uint32_t in_use;
+        mtlpp::Device metal;
+        int64_t tuning_params[2];
+        uint32_t num_build_opts;
+        const char **build_opts;
+    };
+
     class CommandQueue;
     class Device;
     class Buffer;
