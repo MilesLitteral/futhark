@@ -448,7 +448,7 @@ openClDecls cost_centres kernels metal_program =
       [ [C.csdecl|int total_runs;|],
         [C.csdecl|long int total_runtime;|]
       ]
-        ++ [ [C.csdecl|typename kernel $id:name;|]
+        ++ [ [C.csdecl|kernel void $id:name;|]
              | name <- M.keys kernels
            ]
         ++ concat
@@ -471,10 +471,10 @@ openClDecls cost_centres kernels metal_program =
 
     metal_load =
       [ [C.cedecl|
-        void post_metal_setup(MetalEngine *ctx) {
+        void post_metal_setup(void ctx) {
           $stms:(map sizeHeuristicsCode sizeHeuristicsTable)
         }|] 
-      ]
+      ] --maybe unnecessary
     
     program_fragments = metal_program_fragments ++ [[C.cinit|NULL|]]
     metal_boilerplate =
