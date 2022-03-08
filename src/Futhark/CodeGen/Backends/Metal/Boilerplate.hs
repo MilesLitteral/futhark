@@ -306,24 +306,13 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                        }|]
     )
 
-  (fields, init_fields, free_fields) <- GC.contextContents
   ctx <- GC.publicDef "context" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:s;|],
       [C.cedecl|struct $id:s {
                          struct $id:cfg* cfg;
-                         int detail_memory;
-                         int debugging;
-                         int profiling;
-                         int profiling_paused;
-                         int logging;
-                         typename lock_t lock;
-                         Error *error;
+                         typename Error *error;
                          typename FILE *log;
-                         $sdecls:fields
-                         $sdecls:ctx_opencl_fields
-                         typename Buffer global_failure;
-                         typename Error  global_failure_args;
-                         MetalEngine metal;
+                         typename MetalEngine cuda;
                        };|]
     )
 
