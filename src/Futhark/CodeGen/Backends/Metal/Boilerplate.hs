@@ -101,7 +101,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
   cfg <- GC.publicDef "context_config" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:s;|],
       [C.cedecl|struct $id:s { int in_use;
-                               struct opencl_config opencl;
+                               struct MetalEngine metal;
                                typename int64_t tuning_params[$int:num_sizes];
                                int num_build_opts;
                                const char **build_opts;
@@ -125,7 +125,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                          cfg->build_opts = (const char**) malloc(sizeof(const char*));
                          cfg->build_opts[0] = NULL;
                          $stms:size_value_inits
-                         opencl_config_init(&cfg->opencl, $int:num_sizes,
+                         opencl_config_init(&cfg->metal, $int:num_sizes,
                                             tuning_param_names, tuning_param_vars,
                                             cfg->tuning_params, tuning_param_classes);
                          return cfg;
@@ -161,35 +161,35 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
   GC.publicDef_ "context_config_set_profiling" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag) {
-                         cfg->opencl.profiling = flag;
+                         cfg->metal.profiling = flag;
                        }|]
     )
 
   GC.publicDef_ "context_config_set_logging" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, int flag) {
-                         cfg->opencl.logging = flag;
+                         cfg->metal.logging = flag;
                        }|]
     )
 
   GC.publicDef_ "context_config_set_device" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *s);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *s) {
-                         set_preferred_device(&cfg->opencl, s);
+                         set_preferred_device(&cfg->metal, s);
                        }|]
     )
 
   GC.publicDef_ "context_config_set_platform" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *s);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *s) {
-                         set_preferred_platform(&cfg->opencl, s);
+                         set_preferred_platform(&cfg->metal, s);
                        }|]
     )
 
   GC.publicDef_ "context_config_select_device_interactively" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg) {
-                         select_device_interactively(&cfg->opencl);
+                         select_device_interactively(&cfg->metal);
                        }|]
     )
 
@@ -204,65 +204,65 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
   GC.publicDef_ "context_config_dump_program_to" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path) {
-                         cfg->opencl.dump_program_to = path;
+                         cfg->metal.dump_program_to = path;
                        }|]
     )
 
   GC.publicDef_ "context_config_load_program_from" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path) {
-                         cfg->opencl.load_program_from = path;
+                         cfg->metal.load_program_from = path;
                        }|]
     )
 
   GC.publicDef_ "context_config_dump_binary_to" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path) {
-                         cfg->opencl.dump_binary_to = path;
+                         cfg->metal.dump_binary_to = path;
                        }|]
     )
 
   GC.publicDef_ "context_config_load_binary_from" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, const char *path) {
-                         cfg->opencl.load_binary_from = path;
+                         cfg->metal.load_binary_from = path;
                        }|]
     )
 
   GC.publicDef_ "context_config_set_default_group_size" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int size);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, int size) {
-                         cfg->opencl.default_group_size = size;
-                         cfg->opencl.default_group_size_changed = 1;
+                         cfg->metal.default_group_size = size;
+                         cfg->metal.default_group_size_changed = 1;
                        }|]
     )
 
   GC.publicDef_ "context_config_set_default_num_groups" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int num);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, int num) {
-                         cfg->opencl.default_num_groups = num;
+                         cfg->metal.default_num_groups = num;
                        }|]
     )
 
   GC.publicDef_ "context_config_set_default_tile_size" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int num);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, int size) {
-                         cfg->opencl.default_tile_size = size;
-                         cfg->opencl.default_tile_size_changed = 1;
+                         cfg->metal.default_tile_size = size;
+                         cfg->metal.default_tile_size_changed = 1;
                        }|]
     )
 
   GC.publicDef_ "context_config_set_default_reg_tile_size" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int num);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, int size) {
-                         cfg->opencl.default_reg_tile_size = size;
+                         cfg->metal.default_reg_tile_size = size;
                        }|]
     )
 
   GC.publicDef_ "context_config_set_default_threshold" GC.InitDecl $ \s ->
     ( [C.cedecl|void $id:s(struct $id:cfg* cfg, int num);|],
       [C.cedecl|void $id:s(struct $id:cfg* cfg, int size) {
-                         cfg->opencl.default_threshold = size;
+                         cfg->metal.default_threshold = size;
                        }|]
     )
 
@@ -278,27 +278,27 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                          }
 
                          if (strcmp(param_name, "default_group_size") == 0) {
-                           cfg->opencl.default_group_size = new_value;
+                           cfg->metal.default_group_size = new_value;
                            return 0;
                          }
 
                          if (strcmp(param_name, "default_num_groups") == 0) {
-                           cfg->opencl.default_num_groups = new_value;
+                           cfg->metal.default_num_groups = new_value;
                            return 0;
                          }
 
                          if (strcmp(param_name, "default_threshold") == 0) {
-                           cfg->opencl.default_threshold = new_value;
+                           cfg->metal.default_threshold = new_value;
                            return 0;
                          }
 
                          if (strcmp(param_name, "default_tile_size") == 0) {
-                           cfg->opencl.default_tile_size = new_value;
+                           cfg->metal.default_tile_size = new_value;
                            return 0;
                          }
 
                          if (strcmp(param_name, "default_reg_tile_size") == 0) {
-                           cfg->opencl.default_reg_tile_size = new_value;
+                           cfg->metal.default_reg_tile_size = new_value;
                            return 0;
                          }
 
@@ -323,7 +323,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                          $sdecls:ctx_opencl_fields
                          typename Buffer global_failure;
                          typename Error  global_failure_args;
-                         struct MetalEngine metal;
+                         MetalEngine metal;
                        };|]
     )
 
@@ -352,7 +352,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
 
                      typename cl_int no_error = -1;
                      ctx->global_failure =
-                       device.NewBuffer(ctx->opencl.ctx,
+                       device.NewBuffer(ctx->metal.ctx,
                                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                                       sizeof(cl_int), &no_error, &error);
                      OPENCL_SUCCEED_OR_RETURN(error);
@@ -409,85 +409,22 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
   GC.publicDef_ "context_new_with_command_queue" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename CommandQueue queue);|],
       [C.cedecl|struct $id:ctx* $id:s(struct $id:cfg* cfg, typename CommandQueue queue) {
-                          assert(!cfg->in_use);
                           struct $id:ctx* ctx = (struct $id:ctx*) malloc(sizeof(struct $id:ctx));
                           if (ctx == NULL) {
                             return NULL;
                           }
-                          ctx->cfg = cfg;
-                          ctx->cfg->in_use = 1;
 
-                          int required_types = 0;
-                          $stms:set_required_types
-
-                          init_context_early(cfg, ctx);
+                          //init_context_early(cfg, ctx);
                           typename MetalEngine prog = MetalEngine(&ctx->device);
-                          init_context_late(cfg, ctx, prog);
+                          //init_context_late(cfg, ctx, prog);
                           return ctx;
                        }|]
-    )
-
-  GC.publicDef_ "context_free" GC.InitDecl $ \s ->
-    ( [C.cedecl|void $id:s(struct $id:ctx* ctx);|],
-      [C.cedecl|void $id:s(struct $id:ctx* ctx) {
-                                 $stms:free_fields
-                                 free_constants(ctx);
-                                 free_lock(&ctx->lock);
-                                 $stms:(map releaseKernel (M.toList kernels))
-                                 OPENCL_SUCCEED_FATAL(clReleaseMemObject(ctx->global_failure));
-                                 OPENCL_SUCCEED_FATAL(clReleaseMemObject(ctx->global_failure_args));
-                                 teardown_opencl(&ctx->opencl);
-                                 ctx->cfg->in_use = 0;
-                                 free(ctx);
-                               }|]
-    )
-
-  GC.publicDef_ "context_sync" GC.MiscDecl $ \s ->
-    ( [C.cedecl|int $id:s(struct $id:ctx* ctx);|],
-      [C.cedecl|int $id:s(struct $id:ctx* ctx) {
-                 // Check for any delayed error.
-                 typename cl_int failure_idx = -1;
-                 if (ctx->failure_is_an_option) {
-                   OPENCL_SUCCEED_OR_RETURN(
-                     clEnqueueReadBuffer(ctx->opencl.queue,
-                                         ctx->global_failure,
-                                         CL_FALSE,
-                                         0, sizeof(typename cl_int), &failure_idx,
-                                         0, NULL, $exp:(profilingEvent copyScalarFromDev)));
-                   ctx->failure_is_an_option = 0;
-                 }
-
-                 OPENCL_SUCCEED_OR_RETURN(clFinish(ctx->opencl.queue));
-
-                 if (failure_idx >= 0) {
-                   // We have to clear global_failure so that the next entry point
-                   // is not considered a failure from the start.
-                   typename cl_int no_failure = -1;
-                   OPENCL_SUCCEED_OR_RETURN(
-                    clEnqueueWriteBuffer(ctx->opencl.queue, ctx->global_failure, CL_TRUE,
-                                         0, sizeof(cl_int), &no_failure,
-                                         0, NULL, NULL));
-
-                   typename int64_t args[$int:max_failure_args+1];
-                   OPENCL_SUCCEED_OR_RETURN(
-                     clEnqueueReadBuffer(ctx->opencl.queue,
-                                         ctx->global_failure_args,
-                                         CL_TRUE,
-                                         0, sizeof(args), &args,
-                                         0, NULL, $exp:(profilingEvent copyDevToHost)));
-
-                   $stm:(failureSwitch failures)
-
-                   return FUTHARK_PROGRAM_ERROR;
-                 }
-                 return 0;
-               }|]
     )
 
   GC.publicDef_ "context_get_command_queue" GC.InitDecl $ \s ->
     ( [C.cedecl|typename CommandQueue $id:s(struct $id:ctx* ctx);|],
       [C.cedecl|typename CommandQueue $id:s(struct $id:ctx* ctx) {
-                 return ctx->metal.commandQueue;
+                 return ctx->metal._mCommandQueue;
                }|]
     )
 
@@ -646,7 +583,7 @@ sizeHeuristicsCode (SizeHeuristic platform_name device_type which (TPrimExp what
        in concat (M.elems m) ++ [[C.citem|$exp:which' = $exp:e;|]]
 
     onLeaf (DeviceInfo s) = do
-      let s' = "CL_DEVICE_" ++ s
+      let s' = "MTL_DEVICE_" ++ s
           v = s ++ "_val"
       m <- get
       case M.lookup s m of
