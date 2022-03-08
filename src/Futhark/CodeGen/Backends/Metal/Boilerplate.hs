@@ -317,16 +317,13 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                          int profiling_paused;
                          int logging;
                          typename lock_t lock;
-                         char *error;
+                         Error *error;
                          typename FILE *log;
                          $sdecls:fields
                          $sdecls:ctx_opencl_fields
                          typename Buffer global_failure;
                          typename Error  global_failure_args;
-                         struct opencl_context metal;
-                         struct tuning_params tuning_params;
-                         // True if a potentially failing kernel has been enqueued.
-                         typename cl_int failure_is_an_option;
+                         struct MetalEngine metal;
                        };|]
     )
 
@@ -334,22 +331,9 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
 
   GC.earlyDecl
     [C.cedecl|static void init_context_early(struct $id:cfg *cfg, struct $id:ctx* ctx) {
-                     ctx->opencl.cfg = cfg->opencl;
-                     ctx->detail_memory = cfg->opencl.debugging;
-                     ctx->debugging = cfg->opencl.debugging;
-                     ctx->profiling = cfg->opencl.profiling;
-                     ctx->profiling_paused = 0;
-                     ctx->logging = cfg->opencl.logging;
+                     ctx->metal.device = cfg->device;
                      ctx->error = NULL;
                      ctx->log = stderr;
-                     ctx->opencl.profiling_records_capacity = 200;
-                     ctx->opencl.profiling_records_used = 0;
-                     ctx->opencl.profiling_records =
-                       malloc(ctx->opencl.profiling_records_capacity *
-                              sizeof(struct profiling_record));
-                     create_lock(&ctx->lock);
-
-                     ctx->failure_is_an_option = 0;
                      $stms:init_fields
                      $stms:ctx_opencl_inits
   }|]
@@ -368,14 +352,14 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
 
                      typename cl_int no_error = -1;
                      ctx->global_failure =
-                       clCreateBuffer(ctx->opencl.ctx,
+                       device.NewBuffer(ctx->opencl.ctx,
                                       CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                                       sizeof(cl_int), &no_error, &error);
                      OPENCL_SUCCEED_OR_RETURN(error);
 
                      // The +1 is to avoid zero-byte allocations.
                      ctx->global_failure_args =
-                       clCreateBuffer(ctx->opencl.ctx,
+                        device.NewBuffer(ctx->opencl.ctx,
                                       CL_MEM_READ_WRITE,
                                       sizeof(int64_t)*($int:max_failure_args+1), NULL, &error);
                      OPENCL_SUCCEED_OR_RETURN(error);
@@ -388,10 +372,10 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
 
                      init_constants(ctx);
                      // Clear the free list of any deallocations that occurred while initialising constants.
-                     OPENCL_SUCCEED_OR_RETURN(opencl_free_all(&ctx->opencl));
+                     //OPENCL_SUCCEED_OR_RETURN(opencl_free_all(&ctx->opencl));
 
                      // The program will be properly freed after all the kernels have also been freed.
-                     OPENCL_SUCCEED_OR_RETURN(clReleaseProgram(prog));
+                     //OPENCL_SUCCEED_OR_RETURN(clReleaseProgram(prog));
 
                      return futhark_context_sync(ctx);
   }|]
@@ -538,7 +522,7 @@ openClDecls cost_centres kernels metal_program =
       [ [C.csdecl|int total_runs;|],
         [C.csdecl|long int total_runtime;|]
       ]
-        ++ [ [C.csdecl|typename cl_kernel $id:name;|]
+        ++ [ [C.csdecl|typename kernel $id:name;|]
              | name <- M.keys kernels
            ]
         ++ concat
@@ -561,7 +545,7 @@ openClDecls cost_centres kernels metal_program =
 
     metal_load =
       [ [C.cedecl|
-        void post_metal_setup(struct MetalEngine *ctx) {
+        void post_metal_setup(MetalEngine *ctx) {
           $stms:(map sizeHeuristicsCode sizeHeuristicsTable)
         }|] 
       ]
