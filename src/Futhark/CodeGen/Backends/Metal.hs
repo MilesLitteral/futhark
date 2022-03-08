@@ -276,7 +276,7 @@ copyMetalMemory _ _ destspace _ _ srcspace _ =
   error $ "Cannot copy to " ++ show destspace ++ " from " ++ show srcspace
 
 metalMemoryType :: GC.MemoryType Metal ()
-metalMemoryType "device" = pure [C.cty|typename cl_mem|]
+metalMemoryType "device" = pure [C.cty|typename Buffer|]
 metalMemoryType space =
   error $ "Metal backend does not support '" ++ space ++ "' memory space."
 
