@@ -235,16 +235,30 @@ compileMetalAction fcfg mode outpath =
   where
     helper prog = do
       cprog <- handleWarnings fcfg $ Metal.compileProg (T.pack versionString) prog
-      let cpath = outpath `addExtension` "c"
+      let cpath = outpath `addExtension` "cpp"
           hpath = outpath `addExtension` "h"
           jsonpath = outpath `addExtension` "json"
-          extra_options
-            | System.Info.os == "darwin" =
-              ["-framework", "OpenCL"]
-            | System.Info.os == "mingw32" =
-              ["-lOpenCL64"]
-            | otherwise =
-              ["-lOpenCL"]
+          -- extra_options
+          --   | System.Info.os == "darwin" =
+          --     ["-framework", "OpenCL"]
+          --   | System.Info.os == "mingw32" =
+          --     ["-lOpenCL64"]
+          --   | otherwise =
+          --     ["-lOpenCL"]
+
+          -- Metal Flags fr
+          {-  local objcflags="-std=c++11 -x objective-c++ -mmacosx-version-min=$ver"
+              local cppflags="-std=c++11 -mmacosx-version-min=$ver"
+              local ldflags="-framework Metal -framework MetalKit -framework Cocoa -framework CoreFoundation -fobjc-link-runtime"
+
+              rm -Rf $output
+              mkdir -p $output
+
+              clang++ $objcflags -c ../mtlpp.mm -o $output/mtlpp.o
+              clang++ $cppflags $ldflags ../fut++/Mtl++/main.cpp $output/mtlpp.o -o $output/metalAdder
+              xcrun -sdk macosx metal -c ../fut++/Mtl++/add.metal -o $output/add.air
+              xcrun -sdk macosx metallib $output/add.air -o $output/add.metallib
+              -}
 
       case mode of
         ToLibrary -> do
