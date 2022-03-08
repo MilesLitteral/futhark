@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- | All (almost) compiler pipelines end with an 'Action', which does
 -- something with the result of the pipeline.
@@ -238,14 +239,15 @@ compileMetalAction fcfg mode outpath =
       let cpath = outpath `addExtension` "cpp"
           hpath = outpath `addExtension` "h"
           jsonpath = outpath `addExtension` "json"
-          -- extra_options
-          --   | System.Info.os == "darwin" =
-          --     ["-framework", "OpenCL"]
-          --   | System.Info.os == "mingw32" =
-          --     ["-lOpenCL64"]
-          --   | otherwise =
-          --     ["-lOpenCL"]
-
+          extra_options
+            | System.Info.os == "darwin" =
+              ["-framework", "Metal", "-framework", "MetalKit", "-framework", "Cocoa", "-framework", "CoreFoundation", "-fobjc-link-runtime"]
+            | System.Info.os == "mingw32" =
+              ["-lOpenCL64"]
+            | otherwise =
+              ["-lOpenCL"]
+          
+          --this needs to be replaced with below options
           -- Metal Flags fr
           {-  local objcflags="-std=c++11 -x objective-c++ -mmacosx-version-min=$ver"
               local cppflags="-std=c++11 -mmacosx-version-min=$ver"
@@ -260,6 +262,10 @@ compileMetalAction fcfg mode outpath =
               xcrun -sdk macosx metallib $output/add.air -o $output/add.metallib
               -}
 
+      let objcflags :: String  = "-std=c++11 -x objective-c++ -mmacosx-version-min=$ver"
+      let cppflags  :: String  = "-std=c++11 -mmacosx-version-min=$ver"
+      let ldflags   :: String  = "-framework Metal -framework MetalKit -framework Cocoa -framework CoreFoundation -fobjc-link-runtime"
+
       case mode of
         ToLibrary -> do
           let (header, impl, manifest) = Metal.asLibrary cprog
@@ -268,10 +274,15 @@ compileMetalAction fcfg mode outpath =
           liftIO $ T.writeFile jsonpath manifest
         ToExecutable -> do
           liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asExecutable cprog
-          runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
+          runCC cpath outpath ["-O", "-std=c++11", "-mmacosx-version-min=$ver"] ("-lm" : extra_options)
         ToServer -> do
           liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asServer cprog
-          runCC cpath outpath ["-O", "-std=c99"] ("-lm" : extra_options)
+          runCC cpath outpath ["-O", "-std=c++11", "-mmacosx-version-min=$ver"] ("-lm" : extra_options)
+
+        -- clang++ $objcflags -c ../mtlpp.mm -o $output/mtlpp.o
+        -- clang++ $cppflags $ldflags ../fut++/Mtl++/main.cpp $output/mtlpp.o -o $output/metalAdder
+        -- xcrun -sdk macosx metal -c ../fut++/Mtl++/add.metal -o $output/add.air
+        -- xcrun -sdk macosx metallib $output/add.air -o $output/add.metallib
 
 -- | The @futhark multicore@ action.
 compileMulticoreAction :: FutharkConfig -> CompilerMode -> FilePath -> Action MCMem

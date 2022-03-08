@@ -323,7 +323,6 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                      ctx->metal.device = cfg->device;
                      ctx->error = NULL;
                      ctx->log = stderr;
-                     $stms:init_fields
                      $stms:ctx_opencl_inits
   }|]
 
@@ -474,7 +473,7 @@ openClDecls cost_centres kernels metal_program =
         void post_metal_setup(void ctx) {
           $stms:(map sizeHeuristicsCode sizeHeuristicsTable)
         }|] 
-      ] --maybe unnecessary
+      ] -- maybe unnecessary
     
     program_fragments = metal_program_fragments ++ [[C.cinit|NULL|]]
     metal_boilerplate =
