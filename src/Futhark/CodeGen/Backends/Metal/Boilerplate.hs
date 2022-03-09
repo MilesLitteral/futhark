@@ -82,7 +82,7 @@ generateBoilerplate ::
 generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes failures = do
   final_inits <- GC.contextFinalInits
 
-  let (ctx_metal_fields, ctx_opencl_inits, top_decls, later_top_decls) =
+  let (ctx_metal_fields, ctx_metal_inits, top_decls, later_top_decls) =
         openClDecls cost_centres kernels (metal_prelude <> metal_code)
 
   mapM_ GC.earlyDecl top_decls
@@ -101,7 +101,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
   cfg <- GC.publicDef "context_config" GC.InitDecl $ \s ->
     ( [C.cedecl|struct $id:s;|],
       [C.cedecl|struct $id:s { int in_use;
-                               struct MetalEngine metal;
+                               typename MetalEngine metal;
                                typename int64_t tuning_params[$int:num_sizes];
                                int num_build_opts;
                                const char **build_opts;
@@ -323,7 +323,7 @@ generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes fa
                      ctx->metal.device = cfg->device;
                      ctx->error = NULL;
                      ctx->log = stderr;
-                     $stms:ctx_opencl_inits
+                     $stms:ctx_metal_inits
   }|]
 
   let set_tuning_params =

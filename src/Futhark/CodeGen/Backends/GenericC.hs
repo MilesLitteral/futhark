@@ -1606,8 +1606,6 @@ $timingH
 #include <assert.h>
 #include <ctype.h>
 
-$header_extra
-
 $lockH
 
 #define FUTHARK_F64_ENABLED
