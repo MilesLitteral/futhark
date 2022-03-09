@@ -506,8 +506,8 @@ loadKernel (name, safety) =
       SafetyCheap -> [set_global_failure]
       SafetyFull -> [set_global_failure, set_global_failure_args]
 
-releaseKernel :: (KernelName, KernelSafety) -> C.Stm
-releaseKernel (name, _) = [C.cstm|OPENCL_SUCCEED_FATAL(clReleaseKernel(ctx->$id:name));|]
+-- releaseKernel :: (KernelName, KernelSafety) -> C.Stm
+-- releaseKernel (name, _) = [C.cstm|OPENCL_SUCCEED_FATAL(clReleaseKernel(ctx->$id:name));|]
 
 kernelRuntime :: KernelName -> Name
 kernelRuntime = (<> "_total_runtime")
@@ -551,12 +551,12 @@ sizeHeuristicsCode (SizeHeuristic platform_name device_type which (TPrimExp what
   [C.cstm|
    if ($exp:which' == 0 &&
        strstr(option->platform_name, $string:platform_name) != NULL &&
-       (option->device_type & $exp:(clDeviceType device_type)) == $exp:(clDeviceType device_type)) {
+       (option->device_type & $exp:(mtlDeviceType device_type)) == $exp:(mtlDeviceType device_type)) {
      $items:get_size
    }|]
   where
-    clDeviceType DeviceGPU = [C.cexp|CL_DEVICE_TYPE_GPU|]
-    clDeviceType DeviceCPU = [C.cexp|CL_DEVICE_TYPE_CPU|]
+    mtlDeviceType DeviceGPU = [C.cexp|CL_DEVICE_TYPE_GPU|]
+    mtlDeviceType DeviceCPU = [C.cexp|CL_DEVICE_TYPE_CPU|]
 
     which' = case which of
       LockstepWidth -> [C.cexp|ctx->lockstep_width|]

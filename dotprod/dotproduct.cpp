@@ -91,8 +91,10 @@ int futhark_context_config_set_tuning_param(struct futhark_context_config *cfg,
                                             size_t new_value);
 struct futhark_context;
 struct futhark_context *futhark_context_new(struct futhark_context_config *cfg);
-struct futhark_context *futhark_context_new_with_command_queue(struct futhark_context_config *cfg, CommandQueue queue);
-CommandQueue futhark_context_get_command_queue(futhark_context *ctx);
+struct futhark_context
+*futhark_context_new_with_command_queue(struct futhark_context_config *cfg,
+                                        CommandQueue queue);
+CommandQueue futhark_context_get_command_queue(struct futhark_context *ctx);
 int futhark_get_tuning_param_count(void);
 const char *futhark_get_tuning_param_name(int);
 const char *futhark_get_tuning_param_class(int);
@@ -102,13 +104,13 @@ struct futhark_i32_1d;
 struct futhark_i32_1d *futhark_new_i32_1d(struct futhark_context *ctx, const
                                           int32_t *data, int64_t dim0);
 struct futhark_i32_1d *futhark_new_raw_i32_1d(struct futhark_context *ctx, const
-                                              mtlpp::Buffer data, int64_t offset,
+                                              cl_mem data, int64_t offset,
                                               int64_t dim0);
 int futhark_free_i32_1d(struct futhark_context *ctx,
                         struct futhark_i32_1d *arr);
 int futhark_values_i32_1d(struct futhark_context *ctx,
                           struct futhark_i32_1d *arr, int32_t *data);
-Buffer futhark_values_raw_i32_1d(struct futhark_context *ctx,
+cl_mem futhark_values_raw_i32_1d(struct futhark_context *ctx,
                                  struct futhark_i32_1d *arr);
 const int64_t *futhark_shape_i32_1d(struct futhark_context *ctx,
                                     struct futhark_i32_1d *arr);
@@ -232,7 +234,7 @@ static void* fslurp_file(FILE *f, size_t *size) {
 static void* slurp_file(const char *filename, size_t *size) {
   FILE *f = fopen(filename, "rb"); // To avoid Windows messing with linebreaks.
   if (f == NULL) return NULL;
-  unsigned char *s = (unsigned char*)fslurp_file(f, size);
+  unsigned char *s = fslurp_file(f, size);
   fclose(f);
   return s;
 }
