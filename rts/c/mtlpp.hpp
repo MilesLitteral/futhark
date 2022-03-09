@@ -118,7 +118,9 @@ class MetalEngine
     void sendComputeCommand(mtlpp::CommandQueue commandQueue);
     void encodeAddCommand(mtlpp::ComputeCommandEncoder computeEncoder);
     void verifyResults();
+    void execute();
     void execute(int argc, const char* argv[]);
+    void execute(const char *argv, ns::String functionName)
 };
 
 //////////////////////////////////////
