@@ -176,16 +176,10 @@ writeMetalScalar mem i t "device" _ val = do
   val' <- newVName "write_tmp"
   let (decl, blocking) =
         case val of
-          C.Const {} -> ([C.citem|static $ty:t $id:val' = $exp:val;|], [C.cexp|CL_FALSE|])
-          _ -> ([C.citem|$ty:t $id:val' = $exp:val;|], [C.cexp|CL_TRUE|])
+          C.Const {} -> ([C.citem|static $ty:t $id:val' = $exp:val;|], [C.cexp|False|])
+          _ -> ([C.citem|$ty:t $id:val' = $exp:val;|], [C.cexp|True|])
   GC.stm
-    [C.cstm|{$item:decl
-                  OPENCL_SUCCEED_OR_RETURN(
-                    clEnqueueWriteBuffer(ctx->opencl.queue, $exp:mem, $exp:blocking,
-                                         $exp:i * sizeof($ty:t), sizeof($ty:t),
-                                         &$id:val',
-                                         0, NULL, $exp:(profilingEvent copyScalarToDev)));
-                }|]
+    [C.cstm|ctx->metal.generateRandomFloatData($exp:mem);|]
 writeMetalScalar _ _ _ space _ _ =
   error $ "Cannot write to '" ++ space ++ "' memory space."
 
@@ -198,13 +192,7 @@ readMetalScalar mem i t "device" _ = do
   val <- newVName "read_res"
   GC.decl [C.cdecl|$ty:t $id:val;|]
   GC.stm
-    [C.cstm|OPENCL_SUCCEED_OR_RETURN(
-                   clEnqueueReadBuffer(ctx->opencl.queue, $exp:mem,
-                                       ctx->failure_is_an_option ? CL_FALSE : CL_TRUE,
-                                       $exp:i * sizeof($ty:t), sizeof($ty:t),
-                                       &$id:val,
-                                       0, NULL, $exp:(profilingEvent copyScalarFromDev)));
-              |]
+    [C.cstm|return ($ty:t)$exp:mem;|]
   GC.stm
     [C.cstm|if (ctx->failure_is_an_option &&
                      futhark_context_sync(ctx) != 0) { return 1; }|]
@@ -214,15 +202,24 @@ readMetalScalar _ _ _ space _ =
 
 allocateMetalBuffer :: GC.Allocate Metal ()
 allocateMetalBuffer mem size tag "device" =
-  GC.stm [C.cstm|ctx->error = device.NewBuffer(bufferSize, StorageModeShared);|]
+  GC.stm [C.cstm|ctx->metal = MetalEngine($exp:mem, $exp:tag);|]
 allocateMetalBuffer _ _ _ space =
   error $ "Cannot allocate in '" ++ space ++ "' memory space."
 
 deallocateMetalBuffer :: GC.Deallocate Metal ()
 deallocateMetalBuffer mem tag "device" =
-  GC.stm [C.cstm|OPENCL_SUCCEED_OR_RETURN(opencl_free(&ctx->opencl, $exp:mem, $exp:tag));|]
+  GC.stm [C.cstm|delete ($exp:mem);|]
 deallocateMetalBuffer _ _ space =
   error $ "Cannot deallocate in '" ++ space ++ "' space"
+
+  -- OPENCL_SUCCEED_OR_RETURN(
+  --   clEnqueueReadBuffer(ctx->opencl.queue, $exp:srcmem,
+  --                       ctx->failure_is_an_option ? CL_FALSE : CL_TRUE,
+  --                       (size_t)$exp:srcidx, (size_t)$exp:nbytes,
+  --                       $exp:destmem + $exp:destidx,
+  --                       0, NULL, $exp:(profilingEvent copyHostToDev)));
+  -- if (ctx->failure_is_an_option &&
+  --     futhark_context_sync(ctx) != 0) { return 1; }
 
 copyMetalMemory :: GC.Copy Metal ()
 -- The read/write/copy-buffer functions fail if the given offset is
@@ -232,25 +229,14 @@ copyMetalMemory destmem destidx DefaultSpace srcmem srcidx (Space "device") nbyt
   GC.stm
     [C.cstm|
     if ($exp:nbytes > 0) {
-      OPENCL_SUCCEED_OR_RETURN(
-        clEnqueueReadBuffer(ctx->opencl.queue, $exp:srcmem,
-                            ctx->failure_is_an_option ? CL_FALSE : CL_TRUE,
-                            (size_t)$exp:srcidx, (size_t)$exp:nbytes,
-                            $exp:destmem + $exp:destidx,
-                            0, NULL, $exp:(profilingEvent copyHostToDev)));
-      if (ctx->failure_is_an_option &&
-          futhark_context_sync(ctx) != 0) { return 1; }
+      ctx->metal.prepareData(ctx->metal._mDevice);
    }
   |]
 copyMetalMemory destmem destidx (Space "device") srcmem srcidx DefaultSpace nbytes =
   GC.stm
     [C.cstm|
     if ($exp:nbytes > 0) {
-      OPENCL_SUCCEED_OR_RETURN(
-        clEnqueueWriteBuffer(ctx->opencl.queue, $exp:destmem, CL_TRUE,
-                             (size_t)$exp:destidx, (size_t)$exp:nbytes,
-                             $exp:srcmem + $exp:srcidx,
-                             0, NULL, $exp:(profilingEvent copyDevToHost)));
+      ctx->metal.prepareData(ctx->metal._mDevice);
     }
   |]
 copyMetalMemory destmem destidx (Space "device") srcmem srcidx (Space "device") nbytes =
@@ -259,15 +245,7 @@ copyMetalMemory destmem destidx (Space "device") srcmem srcidx (Space "device") 
   GC.stm
     [C.cstm|{
     if ($exp:nbytes > 0) {
-      OPENCL_SUCCEED_OR_RETURN(
-        clEnqueueCopyBuffer(ctx->opencl.queue,
-                            $exp:srcmem, $exp:destmem,
-                            (size_t)$exp:srcidx, (size_t)$exp:destidx,
-                            (size_t)$exp:nbytes,
-                            0, NULL, $exp:(profilingEvent copyDevToDev)));
-      if (ctx->debugging) {
-        OPENCL_SUCCEED_FATAL(clFinish(ctx->opencl.queue));
-      }
+      ctx->metal.prepareData(ctx->metal._mDevice);
     }
   }|]
 copyMetalMemory destmem destidx DefaultSpace srcmem srcidx DefaultSpace nbytes =
@@ -293,17 +271,16 @@ staticMetalArray name "device" t vs = do
       GC.earlyDecl [C.cedecl|static $ty:ct $id:name_realtype[$int:n];|]
       return n
   -- Fake a memory block.
-  GC.contextField (C.toIdent name mempty) [C.cty|struct memblock_device|] Nothing
+  GC.contextField (C.toIdent name mempty) [C.cty|typename memblock_device|] Nothing
   -- During startup, copy the data to where we need it.
   GC.atInit
     [C.cstm|{
-    typename cl_int success;
+    int success;
     ctx->$id:name.references = NULL;
     ctx->$id:name.size = 0;
     ctx->$id:name.mem = device.NewBuffer(bufferSize, StorageModeShared);
-    OPENCL_SUCCEED_OR_RETURN(success);
   }|]
-  GC.item [C.citem|struct memblock_device $id:name = ctx->$id:name;|]
+  GC.item [C.citem|typename memblock_device $id:name = ctx->$id:name;|]
 staticMetalArray _ space _ _ =
   error $ "Metal backend cannot create static array in memory space '" ++ space ++ "'"
 
@@ -322,11 +299,7 @@ callKernel (LaunchKernel safety name args num_workgroups workgroup_size) = do
   -- first created.
   when (safety == SafetyFull) $
     GC.stm
-      [C.cstm|
-      OPENCL_SUCCEED_OR_RETURN(clSetKernelArg(ctx->$id:name, 1,
-                                              sizeof(ctx->failure_is_an_option),
-                                              &ctx->failure_is_an_option));
-    |]
+      [C.cstm|ctx->$id:name.sendComputeCommand(ctx->$id:name._mCommandQueue);|]
 
   zipWithM_ setKernelArg [numFailureParams safety ..] args
   num_workgroups' <- mapM GC.compileExp num_workgroups
@@ -350,21 +323,15 @@ callKernel (LaunchKernel safety name args num_workgroups workgroup_size) = do
           pure v
         _ -> GC.compileExpToName "kernel_arg" pt e
       GC.stm
-        [C.cstm|
-            OPENCL_SUCCEED_OR_RETURN(clSetKernelArg(ctx->$id:name, $int:i, sizeof($id:v), &$id:v));
-          |]
+        [C.cstm|ctx->$id:name.prepareData(ctx->metal._mDevice);|]
     setKernelArg i (MemKArg v) = do
       v' <- GC.rawMem v
       GC.stm
-        [C.cstm|
-            OPENCL_SUCCEED_OR_RETURN(clSetKernelArg(ctx->$id:name, $int:i, sizeof($exp:v'), &$exp:v'));
-          |]
+        [C.cstm|ctx->$id:name.prepareData(ctx->metal._mDevice);|]
     setKernelArg i (SharedMemoryKArg num_bytes) = do
       num_bytes' <- GC.compileExp $ unCount num_bytes
       GC.stm
-        [C.cstm|
-            OPENCL_SUCCEED_OR_RETURN(clSetKernelArg(ctx->$id:name, $int:i, (size_t)$exp:num_bytes', NULL));
-            |]
+        [C.cstm|ctx->$id:name.prepareData(ctx->metal._mDevice);|]
 
     localBytes cur (SharedMemoryKArg num_bytes) = do
       num_bytes' <- GC.compileExp $ unCount num_bytes
@@ -397,12 +364,8 @@ launchKernel kernel_name num_workgroups workgroup_dims local_bytes = do
         fprintf(ctx->log, $string:debug_str, $args:debug_args);
         $id:time_start = get_wall_time();
       }
-      OPENCL_SUCCEED_OR_RETURN(
-        clEnqueueNDRangeKernel(ctx->opencl.queue, ctx->$id:kernel_name, $int:kernel_rank, NULL,
-                               $id:global_work_size, $id:local_work_size,
-                               0, NULL, $exp:(profilingEvent kernel_name)));
+      ctx->metal.execute(ctx->$id:kernel_name, ctx->metal._mDevice);
       if (ctx->debugging) {
-        OPENCL_SUCCEED_FATAL(clFinish(ctx->opencl.queue));
         $id:time_end = get_wall_time();
         long int $id:time_diff = $id:time_end - $id:time_start;
         fprintf(ctx->log, "kernel %s runtime: %ldus\n",

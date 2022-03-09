@@ -82,7 +82,7 @@ generateBoilerplate ::
 generateBoilerplate metal_code metal_prelude cost_centres kernels types sizes failures = do
   final_inits <- GC.contextFinalInits
 
-  let (ctx_opencl_fields, ctx_opencl_inits, top_decls, later_top_decls) =
+  let (ctx_metal_fields, ctx_opencl_inits, top_decls, later_top_decls) =
         openClDecls cost_centres kernels (metal_prelude <> metal_code)
 
   mapM_ GC.earlyDecl top_decls
@@ -478,15 +478,13 @@ openClDecls cost_centres kernels metal_program =
     program_fragments = metal_program_fragments ++ [[C.cinit|NULL|]]
     metal_boilerplate =
       [C.cunit|
-          $esc:("typedef metal_mem Buffer;")
           $esc:(T.unpack metalH)
           static const char *metal_program[] = {$inits:program_fragments};|]
 
 loadKernel :: (KernelName, KernelSafety) -> C.Stm
 loadKernel (name, safety) =
   [C.cstm|{
-  ctx->$id:name = clCreateKernel(prog, $string:(pretty (C.toIdent name mempty)), &error);
-  OPENCL_SUCCEED_FATAL(error);
+  ctx->$id:name = MetalEngine(prog, $string:(pretty (C.toIdent name mempty)), &error);
   $items:set_args
   if (ctx->debugging) {
     fprintf(ctx->log, "Created kernel %s.\n", $string:(pretty name));
@@ -494,13 +492,9 @@ loadKernel (name, safety) =
   }|]
   where
     set_global_failure =
-      [C.citem|OPENCL_SUCCEED_FATAL(
-                     clSetKernelArg(ctx->$id:name, 0, sizeof(typename Buffer),
-                                    &ctx->global_failure));|]
+      [C.citem|ctx->metal.execute(ctx->$id:name, ctx->metal._mDevice);|]
     set_global_failure_args =
-      [C.citem|OPENCL_SUCCEED_FATAL(
-                     clSetKernelArg(ctx->$id:name, 2, sizeof(typename Buffer),
-                                    &ctx->global_failure_args));|]
+      [C.citem|ctx->metal.execute(ctx->$id:name, ctx->metal._mDevice);|]
     set_args = case safety of
       SafetyNone -> []
       SafetyCheap -> [set_global_failure]
@@ -555,8 +549,8 @@ sizeHeuristicsCode (SizeHeuristic platform_name device_type which (TPrimExp what
      $items:get_size
    }|]
   where
-    mtlDeviceType DeviceGPU = [C.cexp|CL_DEVICE_TYPE_GPU|]
-    mtlDeviceType DeviceCPU = [C.cexp|CL_DEVICE_TYPE_CPU|]
+    mtlDeviceType DeviceGPU = [C.cexp|OSX_GPUFamily1_v2|]
+    mtlDeviceType DeviceCPU = [C.cexp|MTLPP_IS_AVAILABLE(mac, ios)|]
 
     which' = case which of
       LockstepWidth -> [C.cexp|ctx->lockstep_width|]
