@@ -40,7 +40,7 @@ tagged with
 do not require deep knowledge of the code base.
 
 
-SO WHAT IS FUTHARK METAL?
+SO WHAT IS FUTHARK-METAL?
 =============
 
 In Brief: this fork of the main Futhark Project hopes to accomplish execution of Futhark on M1 Apple GPU/APUs by creating an addon module which can then create and compile Metal Shader Language Code (Instead of CUDA or OpenCL) on Mac, therefore opening the floodgates on platform agnostic GPU support that Futhark provides, development is currently very hot 
