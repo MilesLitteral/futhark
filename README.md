@@ -52,4 +52,4 @@ Issues and progress are tracked through this repository, it's Project page on @M
 Discussion, technical talks, brainstorming and drafting are all posted to the FM Gist, feel free to read or contribute to the conversation: 
 https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
 
-A handy test command for the build (in root) is `futhark-metal metal dotproduct.fut`
+A handy test command for the build (in root) is `futhark metal dotproduct.fut`
