@@ -209,7 +209,7 @@ compileMetalAction fcfg mode outpath =
   where   
     helper prog = do 
       cprog <- handleWarnings fcfg $ Metal.compileProg prog 
-      let cpath = outpath `addExtension` "m"
+      let cpath = outpath `addExtension` "cc"
           hpath = outpath `addExtension` "h"
           mpath = outpath `addExtension` "metal" --Perhaps this should just be a dup of passed C code Modified with a Kernel Keyword
           jsonpath = outpath `addExtension` "json"
@@ -218,7 +218,7 @@ compileMetalAction fcfg mode outpath =
           let (header, impl, manifest) = Metal.asLibrary cprog -- create Metal Lib
           liftIO $ T.writeFile hpath $ cPrependHeader header --h Files
           liftIO $ T.writeFile cpath $ cPrependHeader impl -- m Files
-          liftIO $ T.WriteFile mpath $ cPrependHeader impl -- Metal Files
+          --liftIO $ T.WriteFile mpath $ cPrependHeader impl -- Metal Files
           liftIO $ T.writeFile jsonpath manifest 
         ToExecutable -> do
           liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asExecutable cprog
