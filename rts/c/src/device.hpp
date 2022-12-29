@@ -10,6 +10,7 @@
 #include "pixel_format.hpp"
 #include "resource.hpp"
 #include "library.hpp"
+#include "dynamic_library.hpp"
 
 namespace mtlpp
 {
@@ -28,6 +29,10 @@ namespace mtlpp
 
     class SamplerDescriptor;
     class RenderPipelineColorAttachmentDescriptor;
+    class TileRenderPipelineColorAttachmentDescriptor;
+    class TileRenderPipelineColorAttachmentDescriptorArray;
+    class TileRenderPipelineDescriptor;
+
     class DepthStencilDescriptor;
     class TextureDescriptor;
     class CompileOptions;
@@ -103,13 +108,16 @@ namespace mtlpp
         Buffer NewBuffer(void* pointer, uint32_t length, ResourceOptions options, std::function<void (void* pointer, uint32_t length)> deallocator);
         DepthStencilState NewDepthStencilState(const DepthStencilDescriptor& descriptor);
         Texture NewTexture(const TextureDescriptor& descriptor);
-        //- (id <MTLTexture>)newTextureWithDescriptor:(MTLTextureDescriptor *)descriptor iosurface:(IOSurfaceRef)iosurface plane:(NSUInteger)plane NS_AVAILABLE_MAC(10_11);
         SamplerState NewSamplerState(const SamplerDescriptor& descriptor);
         Library NewDefaultLibrary();
-        //- (nullable id <MTLLibrary>)newDefaultLibraryWithBundle:(NSBundle *)bundle error:(__autoreleasing NSError **)error NS_AVAILABLE(10_12, 10_0);
+        Library NewDefaultLibraryWithBundle(const ns::Bundle* bundle, ns::Error** error) MTLPP_AVAILABLE(10_12, 10_0);
         Library NewLibrary(const ns::String& filepath, ns::Error* error);
+        Library NewLibrary(const ns::URL, ns::Error* error) MTLPP_AVAILABLE(10_12, 10_0);;
         Library NewLibrary(const char* source, const CompileOptions& options, ns::Error* error);
         void NewLibrary(const char* source, const CompileOptions& options, std::function<void(const Library&, const ns::Error&)> completionHandler);
+        DynamicLibrary* newDynamicLibrary(const Library* library, ns::Error** error) MTLPP_AVAILABLE(10_12, 10_0);
+        DynamicLibrary* newDynamicLibrary(const ns::URL* url,     ns::Error** error) MTLPP_AVAILABLE(10_12, 10_0);
+        BinaryArchive*  newBinaryArchive(const BinaryArchiveDescriptor* descriptor, ns::Error** error) MTLPP_AVAILABLE(10_12, 10_0);
         RenderPipelineState NewRenderPipelineState(const RenderPipelineDescriptor& descriptor, ns::Error* error);
         RenderPipelineState NewRenderPipelineState(const RenderPipelineDescriptor& descriptor, PipelineOption options, RenderPipelineReflection* outReflection, ns::Error* error);
         void NewRenderPipelineState(const RenderPipelineDescriptor& descriptor, std::function<void(const RenderPipelineState&, const ns::Error&)> completionHandler);

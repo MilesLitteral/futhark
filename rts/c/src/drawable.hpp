@@ -10,8 +10,13 @@
 
 namespace mtlpp
 {
+    class MetalLayer layer;
+
     class Drawable : public ns::Object
     {
+    private:
+        Texture texture;
+        MetalLayer layer;
     public:
         Drawable() { }
         Drawable(const ns::Handle& handle) : ns::Object(handle) { }

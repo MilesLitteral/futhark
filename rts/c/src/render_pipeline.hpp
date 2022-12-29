@@ -202,4 +202,58 @@ namespace mtlpp
         Device     GetDevice() const;
     }
     MTLPP_AVAILABLE(10_11, 8_0);
+    
+
+    class TileRenderPipelineColorAttachmentDescriptor : public ns::Object
+    {
+    public:
+        TileRenderPipelineColorAttachmentDescriptor();
+        mtlpp::PixelFormat                                        GetPixelFormat();
+        void                                                      SetPixelFormat(mtlpp::PixelFormat pixelFormat);
+    };
+
+    class TileRenderPipelineColorAttachmentDescriptorArray : public ns::Object
+    {
+    public:
+        TileRenderPipelineColorAttachmentDescriptorArray();
+        TileRenderPipelineColorAttachmentDescriptor*                   GetObject(unsigned int attachmentIndex);
+        void                                                           SetObject(TileRenderPipelineColorAttachmentDescriptor* attachment, unsigned int attachmentIndex);
+    };
+
+    class TileRenderPipelineDescriptor : public ns::Object
+    {
+    public:
+        TileRenderPipelineDescriptor()
+        ns::String*                                             GetLabel();
+        void                                                    SetLabel(const ns::String* label);
+        mtlpp::Function*                                        GetTileFunction();
+        void                                                    SetTileFunction(const class Function* tileFunction);
+        NS::UInteger                                            GetRasterSampleCount();
+        void                                                    SetRasterSampleCount(unsigned int rasterSampleCount);
+
+        TileRenderPipelineColorAttachmentDescriptorArray*       colorAttachments;
+        bool                                                    GetThreadgroupSizeMatchesTileSize();
+        void                                                    SetThreadgroupSizeMatchesTileSize(bool threadgroupSizeMatchesTileSize);
+
+        PipelineBufferDescriptorArray*                          GetTileBuffers;
+        NS::UInteger                                            MaxTotalThreadsPerThreadgroup() const;
+        void                                                    SetMaxTotalThreadsPerThreadgroup(NS::UInteger maxTotalThreadsPerThreadgroup);
+
+        ns::Array<mtlpp::BinaryArchive>*                        GetBinaryArchives();
+        void                                                    SetBinaryArchives(const NS::Array<mtlpp::BinaryArchive>* binaryArchives);
+
+        ns::Array<mtlpp::Library>*                              GetPreloadedLibraries();
+        void                                                    SetPreloadedLibraries(const NS::Array* preloadedLibraries);
+
+        mtlpp::LinkedFunctions*                                 GetLinkedFunctions();
+        void                                                    SetLinkedFunctions(const class LinkedFunctions* linkedFunctions);
+
+        bool                                                    SupportAddingBinaryFunctions();
+        void                                                    SetSupportAddingBinaryFunctions(bool supportAddingBinaryFunctions);
+
+        unsigned int                                            GetMaxCallStackDepth();
+        void                                                    SetMaxCallStackDepth(unsigned int maxCallStackDepth);
+        void                                                    Reset();
+    }
+
 }

@@ -28,15 +28,21 @@ namespace mtlpp
         ComputePipelineDescriptor();
         ComputePipelineDescriptor(const ns::Handle& handle) : ns::Object(handle) { }
 
-        ns::String                 GetLabel() const;
-        Function                   GetComputeFunction() const;
-        bool                       GetThreadGroupSizeIsMultipleOfThreadExecutionWidth() const;
-        StageInputOutputDescriptor GetStageInputDescriptor() const MTLPP_AVAILABLE(10_12, 10_0);
+        ns::String                 GetLabel();
+        Function                   GetComputeFunction();
+        bool                       GetThreadGroupSizeIsMultipleOfThreadExecutionWidth();
+        StageInputOutputDescriptor GetStageInputDescriptor() MTLPP_AVAILABLE(10_12, 10_0);
+        mtlpp::LinkedFunctions*    GetLinkedFunctions() MTLPP_AVAILABLE(10_12, 10_0);
+        bool                       GetSupportAddingBinaryFunctions() MTLPP_AVAILABLE(10_12, 10_0);
+        unsigned int               GetMaxCallStackDepth() MTLPP_AVAILABLE(10_12, 10_0);
 
         void SetLabel(const ns::String& label);
         void SetComputeFunction(const Function& function);
         void SetThreadGroupSizeIsMultipleOfThreadExecutionWidth(bool value);
         void SetStageInputDescriptor(const StageInputOutputDescriptor& stageInputDescriptor) const MTLPP_AVAILABLE(10_12, 10_0);
+        void                                    SetLinkedFunctions(const LinkedFunctions* linkedFunctions) MTLPP_AVAILABLE(10_12, 10_0);   
+        void                                    SetSupportAddingBinaryFunctions(bool supportAddingBinaryFunctions) MTLPP_AVAILABLE(10_12, 10_0);
+        void                                    SetMaxCallStackDepth(unsigned int maxCallStackDepth) MTLPP_AVAILABLE(10_12, 10_0);
 
         void Reset();
     }

@@ -89,4 +89,34 @@ namespace mtlpp
         Validate();
         return uint32_t([(__bridge id<MTLComputePipelineState>)m_ptr threadExecutionWidth]);
     }
+    
+    StageInputOutputDescriptor GetStageInputDescriptor(){
+        return uint32_t([(__bridge id<MTLComputePipelineState>)m_ptr stageInputDescriptor]);
+    }
+
+    mtlpp::LinkedFunctions*    GetLinkedFunctions(){
+        return mtlpp::LinkedFunctions([(__bridge id<MTLComputePipelineState>)m_ptr linkedFunctions]);
+    }
+
+    bool GetSupportAddingBinaryFunctions()
+    {
+        return bool([(__bridge id<MTLComputePipelineState>)m_ptr supportAddingBinaryFunctions]);
+    }
+
+    unsigned int GetMaxCallStackDepth(){
+        return uint32_t([(__bridge id<MTLComputePipelineState>)m_ptr maxCallStackDepth]);
+    }
+
+    void  SetLinkedFunctions(const LinkedFunctions* _linkedFunctions) {
+       [(__bridge MTLComputePipelineDescriptor*)m_ptr setLinkedFunctions:(__bridge MTLStageInputOutputDescriptor*)linkedFunctions.GetPtr()];
+    }
+    
+    void  SetSupportAddingBinaryFunctions(bool _supportAddingBinaryFunctions){
+        [(__bridge MTLComputePipelineDescriptor*)m_ptr setSupportAddingBinaryFunctions:(__bridge MTLStageInputOutputDescriptor*)supportAddingBinaryFunctions.GetPtr()];
+    }
+    
+    void  SetMaxCallStackDepth(unsigned int _maxCallStackDepth) {
+        [(__bridge MTLComputePipelineDescriptor*)m_ptr setMaxCallStackDepth:(__bridge MTLStageInputOutputDescriptor*)maxCallStackDepth.GetPtr()];
+    }
+
 }
