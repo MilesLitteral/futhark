@@ -38,6 +38,7 @@ import qualified Futhark.CodeGen.Backends.MulticoreWASM as MulticoreWASM
 import qualified Futhark.CodeGen.Backends.SequentialC as SequentialC
 import qualified Futhark.CodeGen.Backends.SequentialPython as SequentialPy
 import qualified Futhark.CodeGen.Backends.SequentialWASM as SequentialWASM
+import qualified Futhark.CodeGen.Backends.MLIR as MLIR
 import qualified Futhark.CodeGen.ImpGen.GPU as ImpGenGPU
 import qualified Futhark.CodeGen.ImpGen.Multicore as ImpGenMulticore
 import qualified Futhark.CodeGen.ImpGen.Sequential as ImpGenSequential
@@ -227,6 +228,31 @@ compileMetalAction fcfg mode outpath =
         ToServer -> do
           liftIO $ T.writeFile cpath $ cPrependHeader $ Metal.asServer cprog
           runCC cpath outpath ["-g -fgnu-runtime -O", "-std=gnu99"] --("-lm" : extra_options)
+
+-- | The @futhark MLIR@ action .
+-- it's for testing only as of late
+compileMLIRAction :: FutharkConfig -> CompilerMode => FilePath -> Action GPUMem
+compileMLIRAction fcfg mode outpath =
+  Action
+  { actionName = "Compile to MLIR",
+    actionDescription = "Compile to MLIR",
+    actionProcedure = helper 
+  }
+  where   
+    helper prog    = do 
+      cprog <- handleWarnings fcfg $ Metal.compileProg prog 
+      let cpath    = outpath `addExtension` "cc"
+          hpath    = outpath `addExtension` "h"
+          mpath    = outpath `addExtension` "metal" --Perhaps this should just be a dup of passed C code Modified with a Kernel Keyword
+          jsonpath = outpath `addExtension` "json"
+      case mode of
+        ToLibrary    -> do 
+          compileMLIR
+        ToExecutable -> do
+          compileMLIR
+        ToServer     -> do
+          compileMLIR
+
 
 -- | The @futhark multicore@ action.
 compileMulticoreAction :: FutharkConfig -> CompilerMode -> FilePath -> Action MCMem
