@@ -53,3 +53,6 @@ Discussion, technical talks, brainstorming and drafting are all posted to the FM
 https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
 
 A handy test command for the build (in root) is `futhark metal dotproduct.fut`
+
+## Further Readings and Project Notes
+https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
