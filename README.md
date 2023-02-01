@@ -54,5 +54,10 @@ https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
 
 A handy test command for the build (in root) is `futhark metal dotproduct.fut`
 
+## language-metal-quote
+An offshoot project to support futhark -> native .metal shaders (an interest of this project moving forward) as it would increase the flexibility of Futhark in relation to, say, importing a futhark library into an xcode project like it is a .dll, or making futhark libraries that M1/M2 Macs readily understand and can import 
+
+https://github.com/MilesLitteral/language-metal-quote
+
 ## Further Readings and Project Notes
 https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
