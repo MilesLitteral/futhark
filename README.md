@@ -42,7 +42,7 @@ do not require deep knowledge of the code base.
 
 ## SO WHAT IS FUTHARK-METAL?
 
-In Brief: this fork of the main Futhark Project hopes to accomplish execution of Futhark on M1 Apple GPU/APUs by creating an addon module which can then create and compile Metal Shader Language Code along with Objective-C++ Code (Instead of CUDA or OpenCL) on Mac, therefore opening the floodgates on platform agnostic GPU support that Futhark provides, development is currently very hot. 
+In Brief: this fork of the main Futhark Project hopes to accomplish execution of Futhark on M1 Apple GPU/APUs by integrating an addon module (known as mtlpp or Metal++) which can then create and compile Metal Shader Language Code via Objective-C++ (Instead of CUDA or OpenCL) on Mac; this practice of using C++ to execute Objective-C is known as ```Toll-Free Bridging```, therefore opening the floodgates on platform agnostic GPU support that Futhark provides, development is currently very hot. 
 
 This project has further, future, steps which includes creating an MLIR (LLVM Dialect) backend for Futhark though this is a future objective.
 
@@ -63,3 +63,6 @@ There is a desire to create an MLIR Backend, this is currently inprogress but on
 
 ### Further Readings and Project Notes
 https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
+
+### mtlpp source
+https://github.com/MilesLitteral/mtlpp
