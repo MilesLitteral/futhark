@@ -59,7 +59,7 @@ An offshoot project to support futhark -> native .metal shaders (an interest of 
 https://github.com/MilesLitteral/language-metal-quote
 
 ### notes on MLIR
-There is a desire to create an MLIR Backend, this is currently inprogress but on a separate branch, for more info look at the ```futhark-metal/mlir-backend``` branch
+There is a desire to create an MLIR Backend, this is currently inprogress but on a separate branch, for more info look at the ```futhark-metal/mlir``` branch, there is also a Vulkan branch that will be resumed in the future
 
 ### Further Readings and Project Notes
 https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
