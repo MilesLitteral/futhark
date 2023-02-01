@@ -40,8 +40,7 @@ tagged with
 do not require deep knowledge of the code base.
 
 
-SO WHAT IS FUTHARK-METAL?
-=============
+## SO WHAT IS FUTHARK-METAL?
 
 In Brief: this fork of the main Futhark Project hopes to accomplish execution of Futhark on M1 Apple GPU/APUs by creating an addon module which can then create and compile Metal Shader Language Code along with Objective-C++ Code (Instead of CUDA or OpenCL) on Mac, therefore opening the floodgates on platform agnostic GPU support that Futhark provides, development is currently very hot. 
 
@@ -54,10 +53,10 @@ https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
 
 A handy test command for the build (in root) is `futhark metal dotproduct.fut`
 
-## language-metal-quote
+### language-metal-quote
 An offshoot project to support futhark -> native .metal shaders (an interest of this project moving forward) as it would increase the flexibility of Futhark in relation to, say, importing a futhark library into an xcode project like it is a .dll, or making futhark libraries that M1/M2 Macs readily understand and can import 
 
 https://github.com/MilesLitteral/language-metal-quote
 
-## Further Readings and Project Notes
+### Further Readings and Project Notes
 https://gist.github.com/MilesLitteral/3ae5c427eab97b32d87b7e311d028efe
